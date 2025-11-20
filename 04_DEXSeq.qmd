@@ -10,9 +10,151 @@ library(DEXSeq)
 library(fgsea)
 library(msigdbr)
 library(tidyverse)
+library(dplyr)
+library(tibble) 
+```
+
+# Metadata preparation
+
+```{r}
+#MELANOMA METADATA
+melanoma_metadata <- melanoma_metadata %>%
+  dplyr::select(sample = sample_id,
+                condition = Groups) %>%
+  dplyr::mutate(
+    condition = factor(condition,
+                       levels = c("untreated", "treated"))
+  ) %>%
+  tibble::column_to_rownames("sample")
+
+all(rownames(melanoma_metadata) == colnames(melanoma_iso_count)) #control
+```
+
+```{r}
+# BLADDER METADATA
+bladder_metadata <- bladder_metadata %>% 
+  dplyr::select(sample = sample_id,
+                condition = Groups) %>% 
+  dplyr::mutate(
+    condition = factor(condition,
+                       levels = c("untreated", "treated"))
+  ) %>% 
+  tibble::column_to_rownames("sample")
+
+all(rownames(bladder_metadata) == colnames(bladder_iso_count)) # control
+```
+
+```{r}
+#GETTING ISO INFO
+iso_gene_map <- isoInfo %>%
+  dplyr::select(
+    transcript_id,
+    gene_id,
+    gene_name
+  )
+head(iso_gene_map)
+
+
+#CREATE MELANOMA ASSOCIATIONS
+mel_counts_annot <- melanoma_iso_count %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("transcript_id") %>%
+  dplyr::left_join(iso_gene_map, by = "transcript_id") %>%
+  dplyr::relocate(gene_id, gene_name, .before = transcript_id)
+
+head(mel_counts_annot)
+
+
+#CREATE BLADDER ASSOCIATIONS
+blad_counts_annot <- bladder_iso_count %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("transcript_id") %>%
+  dplyr::left_join(iso_gene_map, by = "transcript_id") %>%
+  dplyr::relocate(gene_id, gene_name, .before = transcript_id)
+
+head(blad_counts_annot)
+```
+
+\
+\
+
+# DEXSeq
+
+```{r}
+dxd_mel <- DEXSeqDataSet(
+  countData  = melanoma_iso_count,
+  sampleData = melanoma_metadata,
+  design     = ~ sample + exon + condition:exon,
+  featureID  = mel_txInfo$transcript_id,
+  groupID    = mel_txInfo$gene_id
+)
+
+dxd_blad <- DEXSeqDataSet(
+  countData  = bladder_iso_count,
+  sampleData = bladder_metadata,
+  design     = ~ sample + exon + condition:exon,
+  featureID  = blad_txInfo$transcript_id,
+  groupID    = blad_txInfo$gene_id
+)
+
+
+dxd_mel  <- estimateSizeFactors(dxd_mel)
+dxd_mel  <- estimateDispersions(dxd_mel)
+dxd_mel  <- testForDEU(dxd_mel)
+dxd_mel  <- estimateExonFoldChanges(dxd_mel, fitExpToVar = "condition")
+dexseq_res_melanoma  <- DEXSeqResults(dxd_mel)
+  
+dxd_blad <- estimateSizeFactors(dxd_blad)
+dxd_blad <- estimateDispersions(dxd_blad)
+dxd_blad <- testForDEU(dxd_blad)
+dxd_blad <- estimateExonFoldChanges(dxd_blad, fitExpToVar = "condition")
+dexseq_res_bladder <- DEXSeqResults(dxd_blad)
 
 ```
 
 ```{r}
+## MELANOMA ---- CREATE DATAFRAME AND SORT IT BY ADJUSTED P VALUE
+dex_mel_df <- as.data.frame(dexseq_res_melanoma)
+dex_mel_df <- dex_mel_df[order(dex_mel_df$padj), ]
+top5_genes_mel  <- dex_mel_df$groupID[!is.na(dex_mel_df$padj)][1:5]
 
+## BLADDER ---- CREATE DATAFRAME AND SORT IT BY ADJUSTED P VALUE
+dex_blad_df <- as.data.frame(dexseq_res_bladder)
+dex_blad_df <- dex_blad_df[order(dex_blad_df$padj), ]
+top5_genes_blad <- dex_blad_df$groupID[!is.na(dex_blad_df$padj)][1:5]
+
+
+```
+
+```{r}
+top5_genes_mel
+top5_genes_blad
+```
+
+```{r}
+alpha <- 0.05
+
+## MELANOMA ----
+# Significant isoforms (rows)
+sig_iso_mel <- dex_mel_df[!is.na(dex_mel_df$padj) & dex_mel_df$padj < alpha, ]
+n_sig_isoforms_mel <- nrow(sig_iso_mel)
+n_sig_isoforms_mel
+
+# Significant genes (unique groupID)
+n_sig_genes_mel <- length(unique(sig_iso_mel$groupID))
+n_sig_genes_mel
+```
+
+```{r}
+alpha <- 0.05
+
+## BLADDER ----
+# Significant isoforms (rows)
+sig_iso_blad <- dex_blad_df[!is.na(dex_blad_df$padj) & dex_blad_df$padj < alpha, ]
+n_sig_isoforms_blad <- nrow(sig_iso_blad)
+n_sig_isoforms_blad
+
+# Significant genes (unique groupID)
+n_sig_genes_blad <- length(unique(sig_iso_blad$groupID))
+n_sig_genes_blad
 ```
