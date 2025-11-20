@@ -3,3 +3,16 @@ title: "DEXSeq"
 format: html
 ---
 
+Load Libraries
+
+```{r}
+library(DEXSeq)
+library(fgsea)
+library(msigdbr)
+library(tidyverse)
+
+```
+
+```{r}
+
+```
