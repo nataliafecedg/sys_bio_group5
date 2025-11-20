@@ -38,7 +38,7 @@ melanoma_gene_count <- melanoma_gene_count[, rownames(melanoma_metadata)]
 dds <- DESeqDataSetFromMatrix(
   countData = melanoma_gene_count,
   colData   = melanoma_metadata,
-  design    = ~ groups
+  design    = ~ Groups
 )
 dds
 ```
@@ -47,7 +47,7 @@ dds
 
 ```{r}
 vsd <- rlog(dds)   # variance-stabilizing transform
-plotPCA(vsd, intgroup = "groups")
+plotPCA(vsd, intgroup = "Groups")
 ```
 
 ### Step 3: Testing for differential expression
@@ -55,5 +55,6 @@ plotPCA(vsd, intgroup = "groups")
 ```{r}
 dds <- DESeq(dds)
 res <- results(dds)
-summary(res) sum(res$padj < 0.05, na.rm=TRUE) # number of significant genes
+summary(res)
+sum(res$padj < 0.05, na.rm=TRUE) # number of significant genes
 ```
