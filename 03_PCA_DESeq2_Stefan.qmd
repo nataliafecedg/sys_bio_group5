@@ -54,9 +54,9 @@ plotPCA(vsd_melanoma, intgroup = "Groups")
 
 ```{r}
 dds_melanoma <- DESeq(dds_melanoma)
-res_melanoma <- results(dds_melanoma)
-summary(res_melanoma)
-sum(res_melanoma$padj < 0.05, na.rm=TRUE) # number of significant genes
+deseq2_res_melanoma <- results(dds_melanoma)
+summary(deseq2_res_melanoma)
+sum(deseq2_res_melanoma$padj < 0.05, na.rm=TRUE) # number of significant genes
 ```
 
 ### Now repeat for the bladder dataset:
@@ -87,9 +87,9 @@ vsd_bladder <- rlog(dds_bladder)   # variance-stabilizing transform
 plotPCA(vsd_bladder, intgroup = "Groups")
 
 dds_bladder <- DESeq(dds_bladder)
-res_bladder <- results(dds_bladder)
-summary(res_bladder)
-sum(res_bladder$padj < 0.05, na.rm=TRUE) # number of significant genes
+deseq2_res_bladder <- results(dds_bladder)
+summary(deseq2_res_bladder)
+sum(deseq2_res_bladder$padj < 0.05, na.rm=TRUE) # number of significant genes
 
 ```
 
@@ -105,8 +105,8 @@ BP_df <- msigdbr(species = "human", category = "C5", subcategory = "BP")
 BP_list <- split(BP_df$ensembl_gene, BP_df$gs_name)
 
 # 2. Make ranked stats vector (use Ensembl IDs as names)
-myStats_melanoma <- res_melanoma[,"stat"]
-names(myStats_melanoma) <- rownames(res_melanoma)
+myStats_melanoma <- deseq2_res_melanoma[,"stat"]
+names(myStats_melanoma) <- rownames(deseq2_res_melanoma)
 
 # 3. Remove version suffix
 clean_names_melanoma <- sub("\\.\\d+$", "", names(myStats_melanoma))
@@ -128,8 +128,8 @@ Now the bladder:
 
 ```{r}
 # 2. Make ranked stats vector (use Ensembl IDs as names)
-myStats_bladder <- res_bladder[,"stat"]
-names(myStats_bladder) <- rownames(res_bladder)
+myStats_bladder <- deseq2_res_bladder[,"stat"]
+names(myStats_bladder) <- rownames(deseq2_res_bladder)
 
 # 3. Remove version suffix
 clean_names_bladder <- sub("\\.\\d+$", "", names(myStats_bladder))
