@@ -3,71 +3,82 @@ title: "05_compare_DESeq2_DEXSeq.R"
 format: html
 ---
 
+```{r}
+library(dplyr) 
+library(tibble)
+```
+
 ## Melanoma:
 
 First, summarize the DEXSeq results to gene-level
 
 ```{r}
-# Here I've just copied his code. I didn't update any of the variable names, we still need to do that.
-dexseqResultGene <-
-  # Turn the DEXSeqResults object into a plain tibble
-  dexseqResult %>%
+dexseqResultGene_mel <-
+  dexseq_res_melanoma %>%
   as.data.frame() %>%
   as_tibble() %>%
-  # Remove rows with NULL values in stat column
-  filter(
-    ! is.na(stat)
-  ) %>%
-  # Select and rename columns
+  # keep only rows with a valid test statistic
+  filter(!is.na(stat)) %>%
+  # select and rename the important columns
   dplyr::select(
-    gene_id = groupID,
+    gene_id    = groupID,
     isoform_id = featureID,
     stat,
-    log2FC = log2fold_Primary_Tumor_Solid_Tissue_Normal,
+    log2FC     = dplyr::starts_with("log2fold_"),
     pvalue,
     padj
   ) %>%
-  # Group by gene to include all the corresponding isoforms
+  # per-gene: keep only the isoform with the smallest p-value
   group_by(gene_id) %>%
-  # For each gene, keep only the single isoform with the smallest p-value
   slice_min(
-    order_by = pvalue,
-    n = 1,
+    order_by  = pvalue,
+    n         = 1,
     with_ties = FALSE
   ) %>%
   ungroup() %>%
-  # Recalculate FDR across genes using those per-gene minimal p-values.
+  # recompute FDR at gene level from these minimal p-values
   mutate(
-    padj = p.adjust(pvalue, method = 'fdr')
-)
+    padj = p.adjust(pvalue, method = "fdr")
+  )
 ```
 
 Compare to DeSeq2 Differential Expression:
 
 ```{r}
-# Here I've just copied his code and changed deseq2Results into deseq2_res_melanoma:
+alpha <- 0.05
 
-# DEXSeq per-gene q-values
-dex_gene <- dexseqResultGene %>%
-  mutate(gene_id, dex_padj = padj,
-         dex_sig = !is.na(padj) & padj < alpha)
+## DEXSeq per-gene q-values (melanoma)
+dex_gene <- dexseqResultGene_mel %>%
+  mutate(
+    dex_padj = padj,
+    dex_sig  = !is.na(padj) & padj < alpha
+  )
 
-# DESeq2 gene-level q-values
+## DESeq2 gene-level q-values (melanoma)
 deseq_gene <- deseq2_res_melanoma %>%
-  mutate(gene_id, deseq_padj = padj,
-         deseq_sig = !is.na(padj) & padj < alpha)
+  as.data.frame() %>%
+  rownames_to_column("gene_id") %>%
+  as_tibble() %>%
+  mutate(
+    deseq_padj = padj,
+    deseq_sig  = !is.na(padj) & padj < alpha
+  )
 
-# Gene universe = genes present in BOTH results
+## Gene universe = genes present in BOTH results
 univ <- intersect(dex_gene$gene_id, deseq_gene$gene_id)
 
 both <- dex_gene %>%
   filter(gene_id %in% univ) %>%
-  mutate(gene_id, dex_sig) %>%
-  inner_join(deseq_gene %>%
-               filter(gene_id %in% univ) %>%
-               mutate(gene_id, deseq_sig), by = "gene_id")
-# Contingency table (DEXSeq vs DESeq2 significance)
-contig_tab <- table(DEXSeq = both$dex_sig, DESeq2 = both$deseq_sig)
+  inner_join(
+    deseq_gene %>% filter(gene_id %in% univ),
+    by = "gene_id"
+  )
+
+## Contingency table (DEXSeq vs DESeq2 significance)
+contig_tab <- table(
+  DEXSeq = both$dex_sig,
+  DESeq2 = both$deseq_sig
+)
 contig_tab
 
 ```
@@ -75,64 +86,141 @@ contig_tab
 ## Bladder
 
 ```{r}
-# Here I've just copied his code:
-dexseqResultGene <-
-  # Turn the DEXSeqResults object into a plain tibble
-  dexseqResult %>%
+dexseqResultGene_blad <-
+  dexseq_res_bladder %>%
   as.data.frame() %>%
   as_tibble() %>%
-  # Remove rows with NULL values in stat column
-  filter(
-    ! is.na(stat)
-  ) %>%
-  # Select and rename columns
+  # keep only rows with a valid test statistic
+  filter(!is.na(stat)) %>%
+  # select and rename columns
   dplyr::select(
-    gene_id = groupID,
+    gene_id    = groupID,
     isoform_id = featureID,
     stat,
-    log2FC = log2fold_Primary_Tumor_Solid_Tissue_Normal,
+    log2FC     = dplyr::starts_with("log2fold_"),
     pvalue,
     padj
   ) %>%
-  # Group by gene to include all the corresponding isoforms
+  # group by gene (to consider all its isoforms)
   group_by(gene_id) %>%
-  # For each gene, keep only the single isoform with the smallest p-value
+  # for each gene, keep the isoform with the smallest p-value
   slice_min(
-    order_by = pvalue,
-    n = 1,
+    order_by  = pvalue,
+    n         = 1,
     with_ties = FALSE
   ) %>%
   ungroup() %>%
-  # Recalculate FDR across genes using those per-gene minimal p-values.
+  # recompute FDR at gene level from those minimal p-values
   mutate(
-    padj = p.adjust(pvalue, method = 'fdr')
-)
+    padj = p.adjust(pvalue, method = "fdr")
+  )
 ```
 
 ```{r}
-# Here I've just copied his code and changed deseq2Results into deseq2_res_bladder:
+alpha <- 0.05
 
-# DEXSeq per-gene q-values
-dex_gene <- dexseqResultGene %>%
-  mutate(gene_id, dex_padj = padj,
-         dex_sig = !is.na(padj) & padj < alpha)
+## DEXSeq per-gene q-values (bladder)
+dex_gene <- dexseqResultGene_blad %>%
+  mutate(
+    dex_padj = padj,
+    dex_sig  = !is.na(padj) & padj < alpha
+  )
 
-# DESeq2 gene-level q-values
+## DESeq2 gene-level q-values (bladder)
 deseq_gene <- deseq2_res_bladder %>%
-  mutate(gene_id, deseq_padj = padj,
-         deseq_sig = !is.na(padj) & padj < alpha)
+  as.data.frame() %>%
+  rownames_to_column("gene_id") %>%
+  as_tibble() %>%
+  mutate(
+    deseq_padj = padj,
+    deseq_sig  = !is.na(padj) & padj < alpha
+  )
 
-# Gene universe = genes present in BOTH results
+## Gene universe = genes present in BOTH results
 univ <- intersect(dex_gene$gene_id, deseq_gene$gene_id)
 
 both <- dex_gene %>%
   filter(gene_id %in% univ) %>%
-  mutate(gene_id, dex_sig) %>%
-  inner_join(deseq_gene %>%
-               filter(gene_id %in% univ) %>%
-               mutate(gene_id, deseq_sig), by = "gene_id")
-# Contingency table (DEXSeq vs DESeq2 significance)
-contig_tab <- table(DEXSeq = both$dex_sig, DESeq2 = both$deseq_sig)
-contig_tab
+  inner_join(
+    deseq_gene %>% filter(gene_id %in% univ),
+    by = "gene_id"
+  )
+
+## Contingency table (DEXSeq vs DESeq2 significance)
+contig_tab_blad <- table(
+  DEXSeq = both$dex_sig,
+  DESeq2 = both$deseq_sig
+)
+contig_tab_blad
+```
+
+# Some useful plots: 
+
+# - ORA
+
+```{r}
+library(dplyr)
+library(tibble)
+library(ggplot2)
+
+alpha <- 0.05
+lfc_thresh <- 1  # soglia per up/down "forti"
+
+# Trasforma i risultati DESeq2 in data frame
+res_mel_df <- as.data.frame(deseq2_res_melanoma) %>%
+  rownames_to_column("gene_id") %>%
+  as_tibble() %>%
+  # togli NAs in padj
+  filter(!is.na(padj)) %>%
+  # definisci categoria up/down/NS
+  mutate(
+    regulation = case_when(
+      padj < alpha & log2FoldChange >  lfc_thresh  ~ "Up",
+      padj < alpha & log2FoldChange < -lfc_thresh  ~ "Down",
+      TRUE                                         ~ "NS"
+    )
+  )
+
+# Volcano plot melanoma
+ggplot(res_mel_df, aes(x = log2FoldChange, y = -log10(padj), color = regulation)) +
+  geom_point(alpha = 0.6, size = 1) +
+  geom_vline(xintercept = c(-lfc_thresh, lfc_thresh), linetype = "dashed") +
+  geom_hline(yintercept = -log10(alpha), linetype = "dashed") +
+  scale_color_manual(values = c("Down" = "blue", "NS" = "grey70", "Up" = "red")) +
+  labs(
+    title = "Melanoma – DESeq2 volcano plot",
+    x = "log2 fold change (treated vs untreated)",
+    y = "-log10(FDR)",
+    color = "Regulation"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+res_blad_df <- as.data.frame(deseq2_res_bladder) %>%
+  rownames_to_column("gene_id") %>%
+  as_tibble() %>%
+  filter(!is.na(padj)) %>%
+  mutate(
+    regulation = case_when(
+      padj < alpha & log2FoldChange >  lfc_thresh  ~ "Up",
+      padj < alpha & log2FoldChange < -lfc_thresh  ~ "Down",
+      TRUE                                         ~ "NS"
+    )
+  )
+
+ggplot(res_blad_df, aes(x = log2FoldChange, y = -log10(padj), color = regulation)) +
+  geom_point(alpha = 0.6, size = 1) +
+  geom_vline(xintercept = c(-lfc_thresh, lfc_thresh), linetype = "dashed") +
+  geom_hline(yintercept = -log10(alpha), linetype = "dashed") +
+  scale_color_manual(values = c("Down" = "blue", "NS" = "grey70", "Up" = "red")) +
+  labs(
+    title = "Bladder – DESeq2 volcano plot",
+    x = "log2 fold change (treated vs untreated)",
+    y = "-log10(FDR)",
+    color = "Regulation"
+  ) +
+  theme_minimal()
 
 ```

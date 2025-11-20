@@ -6,6 +6,7 @@ format: html
 Cleaning up the data to include only our selected samples
 
 ```{r}
+library(dplyr)
 
 bladder_samples = c("GSM7494390", "GSM7494391", "GSM7494392", "GSM7494400", "GSM7494401", "GSM7494402", "GSM7494403")
 melanoma_samples = c("GSM6395044", "GSM6395045", "GSM6395046", "GSM6395050", "GSM6395051", "GSM6395052")
@@ -16,8 +17,8 @@ bladder_iso_count <- bladder_iso_count[, bladder_samples]
 melanoma_iso_count <- melanoma_iso_count[, melanoma_samples]
 
 bladder_gene_count <- bladder_gene_count %>%
-  select(all_of(bladder_samples))
+  dplyr::select(all_of(bladder_samples))
 
 melanoma_gene_count <- melanoma_gene_count %>%
-  select(all_of(melanoma_samples))
+  dplyr::select(all_of(melanoma_samples))
 ```
