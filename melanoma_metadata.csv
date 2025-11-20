@@ -1,0 +1,7 @@
+study_id;sample_id;title;characteristics;Groups;
+GSE209769;GSM6395044;A375NC rep1;tissue: skin,cell line: A375,cell type: Melanoma cells,genotype: BRAFV600E,treatment: Normal culture;untreated;
+GSE209769;GSM6395045;A375NC rep2;tissue: skin,cell line: A375,cell type: Melanoma cells,genotype: BRAFV600E,treatment: Normal culture;untreated;
+GSE209769;GSM6395046;A375NC rep3;tissue: skin,cell line: A375,cell type: Melanoma cells,genotype: BRAFV600E,treatment: Normal culture;untreated;
+GSE209769;GSM6395050;A375CDDP rep1;tissue: skin,cell line: A375,cell type: Melanoma cells,genotype: BRAFV600E,treatment: Cisplatin;treated  ;
+GSE209769;GSM6395051;A375CDDP rep2;tissue: skin,cell line: A375,cell type: Melanoma cells,genotype: BRAFV600E,treatment: Cisplatin;treated;
+GSE209769;GSM6395052;A375CDDP rep3;tissue: skin,cell line: A375,cell type: Melanoma cells,genotype: BRAFV600E,treatment: Cisplatin;treated;

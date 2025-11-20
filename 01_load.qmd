@@ -3,6 +3,43 @@ title: "01_load"
 format: html
 ---
 
-```{r}
+## Preparation
 
+```{r}
+#Load libraries:
+library(readr)
+```
+
+```{r}
+# Load data loading functions:
+load(file='/home/projects/22140/exam_data/exam_functions.Rdata')
+```
+
+1\) loadIsoformCountMatrix(): loads the isoform count matrix from any study when you give it a study_id as a character string (e.g. “GSE103327”). Here rows are isoforms and columns are samples that should corespond to the sample_id from the meta data you extracted.
+
+2\) extractGeneCountMatrixFromIsoCounts(): takes the isoform count matrix from loadIsoformCountMatrix() and summarize it to a gene count matrix (buy simply, for each sample, summing the count for all isoforms belonging to each gene).
+
+```{r}
+#Load information on which isoforms belong to which genes:
+isoInfo <- read_rds(
+paste0(
+'/home/projects/22140/exam_data/',
+'Homo_sapiens.GRCh38.107.chr_patch_hapl_scaff_tx_info.Rds'
+)
+)
+```
+
+## Load datasets
+
+```{r}
+# Load isoform count matrix from relevant studies
+melanoma_iso_count <- loadIsoformCountMatrix("GSE209769")
+bladder_iso_count <- loadIsoformCountMatrix("GSE235066")
+
+```
+
+```{r}
+# Summarize isoform count matrix into gene count matrix:
+melanoma_gene_count <- extractGeneCountMatrixFromIsoCounts(melanoma_iso_count)
+bladder_gene_count <- extractGeneCountMatrixFromIsoCounts(bladder_iso_count)
 ```

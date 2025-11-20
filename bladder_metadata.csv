@@ -1,0 +1,14 @@
+study_id;sample_id;title;characteristics;Groups;
+GSE235066;GSM7494390;Cisplatin_5637_1;cell line: 5637,cell type: Bladder cancer,treatment: Cisplatin;treated  ;
+GSE235066;GSM7494391;Cisplatin_5637_2;cell line: 5637,cell type: Bladder cancer,treatment: Cisplatin;treated  ;
+GSE235066;GSM7494392;Cisplatin_5637_3;cell line: 5637,cell type: Bladder cancer,treatment: Cisplatin;treated  ;
+GSE235066;GSM7494400;Cisplatin_5637_Untreated_1;cell line: 5637,cell type: Bladder cancer,treatment: Cisplatin;untreated;
+GSE235066;GSM7494401;Cisplatin_5637_Untreated_2;cell line: 5637,cell type: Bladder cancer,treatment: Cisplatin;untreated;
+GSE235066;GSM7494402;Cisplatin_5637_Untreated_3;cell line: 5637,cell type: Bladder cancer,treatment: Cisplatin;untreated;
+GSE235066;GSM7494403;Cisplatin_5637_Untreated_4;cell line: 5637,cell type: Bladder cancer,treatment: Cisplatin;untreated;
+;;;;;
+;;;;;
+;;;;;
+;;;;;
+;;;;;
+;;;;;
