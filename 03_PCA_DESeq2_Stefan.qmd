@@ -19,8 +19,8 @@ The first step is to organize the data (gene count matrix + sample meta data) in
 ```{r}
 
 # 0. safety: don't overwrite originals
-meta_orig <- melanoma_metadata
-counts_orig <- melanoma_gene_count
+melanoma_meta_orig <- melanoma_metadata
+melanoma_counts_orig <- melanoma_gene_count
 
 melanoma_metadata <- as.data.frame(melanoma_metadata)
 
@@ -57,4 +57,38 @@ dds <- DESeq(dds)
 res <- results(dds)
 summary(res)
 sum(res$padj < 0.05, na.rm=TRUE) # number of significant genes
+```
+
+### Now repeat for the bladder dataset:
+
+```{r}
+
+bladder_meta_orig <- bladder_metadata
+bladder_counts_orig <- bladder_gene_count
+
+bladder_metadata <- as.data.frame(bladder_metadata)
+
+# 1. Set the sample IDs as rownames of the metadata
+rownames(bladder_metadata) <- bladder_metadata$sample_id
+
+all(rownames(bladder_metadata) %in% colnames(bladder_gene_count))   # should be TRUE
+all(rownames(bladder_metadata) == colnames(bladder_gene_count))    # TRUE if already in same order
+
+bladder_gene_count <- bladder_gene_count[, rownames(bladder_metadata)]
+
+dds <- DESeqDataSetFromMatrix(
+  countData = bladder_gene_count,
+  colData   = bladder_metadata,
+  design    = ~ Groups
+)
+dds
+
+vsd <- rlog(dds)   # variance-stabilizing transform
+plotPCA(vsd, intgroup = "Groups")
+
+dds <- DESeq(dds)
+res <- results(dds)
+summary(res)
+sum(res$padj < 0.05, na.rm=TRUE) # number of significant genes
+
 ```
