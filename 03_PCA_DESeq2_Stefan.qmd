@@ -93,7 +93,7 @@ sum(res_bladder$padj < 0.05, na.rm=TRUE) # number of significant genes
 
 ```
 
-### **Gene Set Enrichment Analysis (Specifically FSC)**
+### **Gene Set Enrichment Analysis (Specifically FCS)**
 
 High PC1 variance for both datasets and straightforward study design suggest no obvious confounders, so we did not correct for confounders.
 
