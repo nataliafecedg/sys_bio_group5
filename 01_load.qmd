@@ -43,3 +43,9 @@ bladder_iso_count <- loadIsoformCountMatrix("GSE235066")
 melanoma_gene_count <- extractGeneCountMatrixFromIsoCounts(melanoma_iso_count)
 bladder_gene_count <- extractGeneCountMatrixFromIsoCounts(bladder_iso_count)
 ```
+
+```{r}
+# Load metadata:
+bladder_metadata <- read_delim("bladder_metadata.csv", delim = ";")
+melanoma_metadata <- read_delim("melanoma_metadata.csv", delim = ";")
+```
