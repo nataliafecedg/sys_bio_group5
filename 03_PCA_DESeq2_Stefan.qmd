@@ -35,28 +35,28 @@ all(rownames(melanoma_metadata) == colnames(melanoma_gene_count))    # TRUE if a
 melanoma_gene_count <- melanoma_gene_count[, rownames(melanoma_metadata)]
 
 # 4. Build the DESeq2 dataset
-dds <- DESeqDataSetFromMatrix(
+dds_melanoma <- DESeqDataSetFromMatrix(
   countData = melanoma_gene_count,
   colData   = melanoma_metadata,
   design    = ~ Groups
 )
-dds
+dds_melanoma
 ```
 
 ### Step 2: PCA (Principal Component Analysis)
 
 ```{r}
-vsd <- rlog(dds)   # variance-stabilizing transform
-plotPCA(vsd, intgroup = "Groups")
+vsd_melanoma <- rlog(dds_melanoma)   # variance-stabilizing transform
+plotPCA(vsd_melanoma, intgroup = "Groups")
 ```
 
 ### Step 3: Testing for differential expression
 
 ```{r}
-dds <- DESeq(dds)
-res <- results(dds)
-summary(res)
-sum(res$padj < 0.05, na.rm=TRUE) # number of significant genes
+dds_melanoma <- DESeq(dds_melanoma)
+deseq2_res_melanoma <- results(dds_melanoma)
+summary(deseq2_res_melanoma)
+sum(deseq2_res_melanoma$padj < 0.05, na.rm=TRUE) # number of significant genes
 ```
 
 ### Now repeat for the bladder dataset:
@@ -76,19 +76,196 @@ all(rownames(bladder_metadata) == colnames(bladder_gene_count))    # TRUE if alr
 
 bladder_gene_count <- bladder_gene_count[, rownames(bladder_metadata)]
 
-dds <- DESeqDataSetFromMatrix(
+dds_bladder <- DESeqDataSetFromMatrix(
   countData = bladder_gene_count,
   colData   = bladder_metadata,
   design    = ~ Groups
 )
-dds
+dds_bladder
 
-vsd <- rlog(dds)   # variance-stabilizing transform
-plotPCA(vsd, intgroup = "Groups")
+vsd_bladder <- rlog(dds_bladder)   # variance-stabilizing transform
+plotPCA(vsd_bladder, intgroup = "Groups")
 
-dds <- DESeq(dds)
-res <- results(dds)
-summary(res)
-sum(res$padj < 0.05, na.rm=TRUE) # number of significant genes
+dds_bladder <- DESeq(dds_bladder)
+deseq2_res_bladder <- results(dds_bladder)
+summary(deseq2_res_bladder)
+sum(deseq2_res_bladder$padj < 0.05, na.rm=TRUE) # number of significant genes
 
+```
+
+### **Gene Set Enrichment Analysis (Specifically FCS)**
+
+High PC1 variance for both datasets and straightforward study design suggest no obvious confounders, so we did not correct for confounders.
+
+First, let's tackle the melanoma dataset:
+
+```{r}
+# 1. Gene sets (Biological Process, Ensembl IDs)
+BP_df <- msigdbr(species = "human", category = "C5", subcategory = "BP")
+BP_list <- split(BP_df$ensembl_gene, BP_df$gs_name)
+
+# 2. Make ranked stats vector (use Ensembl IDs as names)
+myStats_melanoma <- deseq2_res_melanoma[,"stat"]
+names(myStats_melanoma) <- rownames(deseq2_res_melanoma)
+
+# 3. Remove version suffix
+clean_names_melanoma <- sub("\\.\\d+$", "", names(myStats_melanoma))
+names(myStats_melanoma) <- clean_names_melanoma
+
+# 4. Clean up
+myStats_melanoma <- myStats_melanoma[!is.na(myStats_melanoma)]
+myStats_melanoma <- sort(myStats_melanoma, decreasing = TRUE)
+
+# 5. Run fgsea
+fgseaRes_melanoma <- fgseaMultilevel(pathways = BP_list, stats = myStats_melanoma,
+                            minSize = 15, maxSize = 500, scoreType = "std")
+# 6. Results
+sum(fgseaRes_melanoma$padj < 0.05)
+head(fgseaRes_melanoma[order(fgseaRes_melanoma$padj), ], 10)
+```
+
+Now the bladder:
+
+```{r}
+# 2. Make ranked stats vector (use Ensembl IDs as names)
+myStats_bladder <- deseq2_res_bladder[,"stat"]
+names(myStats_bladder) <- rownames(deseq2_res_bladder)
+
+# 3. Remove version suffix
+clean_names_bladder <- sub("\\.\\d+$", "", names(myStats_bladder))
+names(myStats_bladder) <- clean_names_bladder
+
+# 4. Clean up
+myStats_bladder <- myStats_bladder[!is.na(myStats_bladder)]
+myStats_bladder <- sort(myStats_bladder, decreasing = TRUE)
+
+# 5. Run fgsea
+fgseaRes_bladder <- fgseaMultilevel(pathways = BP_list, stats = myStats_bladder,
+                            minSize = 15, maxSize = 500, scoreType = "std")
+# 6. Results
+sum(fgseaRes_bladder$padj < 0.05)
+head(fgseaRes_bladder[order(fgseaRes_bladder$padj), ], 10)
+```
+
+Now let’s sort by significance, pick the top pathway and plot enrichment.
+
+Melanoma
+
+```{r}
+# sort significant results
+fg_sig_melanoma <- fgseaRes_melanoma %>%
+  arrange(padj) %>%
+  filter(padj < 0.05)
+
+# pick the top pathway
+chosen_pathway_melanoma <- fg_sig_melanoma$pathway[1]
+
+# plot enrichment
+plotEnrichment(BP_list[[chosen_pathway_melanoma]], myStats_melanoma) +
+  ggplot2::labs(title = paste0("Enrichment: ", chosen_pathway_melanoma))
+
+# extract first 3 leading-edge genes
+leading_melanoma <- fg_sig_melanoma$leadingEdge[[1]]
+first_genes_melanoma <- head(leading_melanoma, 3)
+first_genes_melanoma
+```
+
+Bladder
+
+```{r}
+# sort significant results
+fg_sig_bladder <- fgseaRes_bladder %>%
+  arrange(padj) %>%
+  filter(padj < 0.05)
+
+# pick the top pathway
+chosen_pathway_bladder <- fg_sig_bladder$pathway[1]
+
+# plot enrichment
+plotEnrichment(BP_list[[chosen_pathway_bladder]], myStats_bladder) +
+  ggplot2::labs(title = paste0("Enrichment: ", chosen_pathway_bladder))
+
+# extract first 3 leading-edge genes
+leading <- fg_sig_bladder$leadingEdge[[1]]
+first_genes_bladder <- head(leading, 3)
+first_genes_bladder
+```
+
+**Non-directional on melanoma:**
+
+```{r}
+stats_abs_melanoma <- abs(myStats_melanoma)
+
+fg_nondir_melanoma <- fgseaMultilevel(
+  pathways = BP_list,
+  stats = stats_abs_melanoma,
+  minSize = 15,
+  maxSize = 500,
+  scoreType = "pos"
+)
+
+fg_nondir_melanoma <- fg_nondir_melanoma[order(fg_nondir_melanoma$padj), ]
+head(fg_nondir_melanoma, 10)
+```
+
+```{r}
+fg_volcano_melanoma <- fgseaRes_melanoma %>%
+  mutate(sig = padj < 0.05,
+         mlog10padj = -log10(padj))
+
+to_label <- fg_volcano_melanoma %>% arrange(padj) %>% slice_head(n = 10)
+
+library(ggrepel)
+ggplot(fg_volcano_melanoma, aes(x = NES, y = mlog10padj, color = sig)) +
+  geom_point(alpha = 0.8) +
+  geom_hline(yintercept = -log10(0.05), linetype = 2) +
+  geom_text_repel(data = to_label,
+                  aes(label = stringr::str_trunc(pathway, 50)),
+                  max.overlaps = 30, size = 3) +
+  scale_color_manual(values = c("FALSE" = "grey80", "TRUE" = "#1f77b4"),
+                     labels = c("n.s.", "< 0.05")) +
+  labs(x = "NES",
+       y = expression(-log[10](padj)),
+       color = "Significant",
+       title = "Volcano plot of gene-set enrichment for the melanoma dataset") +
+  theme_minimal(base_size = 11)
+```
+
+**Non-directional on bladder:**
+
+```{r}
+stats_abs_bladder <- abs(myStats_bladder)
+
+fg_nondir_bladder <- fgseaMultilevel(
+  pathways = BP_list,
+  stats = stats_abs_bladder,
+  minSize = 15,
+  maxSize = 500,
+  scoreType = "pos"
+)
+
+fg_nondir_bladder <- fg_nondir_bladder[order(fg_nondir_bladder$padj), ]
+head(fg_nondir_bladder, 10)
+```
+
+```{r}
+fg_volcano_bladder <- fgseaRes_bladder %>%
+  mutate(sig = padj < 0.05,
+         mlog10padj = -log10(padj))
+
+to_label <- fg_volcano_bladder %>% arrange(padj) %>% slice_head(n = 10)
+
+ggplot(fg_volcano_bladder, aes(x = NES, y = mlog10padj, color = sig)) +
+  geom_point(alpha = 0.8) +
+  geom_hline(yintercept = -log10(0.05), linetype = 2) +
+  geom_text_repel(data = to_label,
+                  aes(label = stringr::str_trunc(pathway, 50)),
+                  max.overlaps = 30, size = 3) +
+  scale_color_manual(values = c("FALSE" = "grey80", "TRUE" = "#1f77b4"),
+                     labels = c("n.s.", "< 0.05")) +
+  labs(x = "NES",
+       y = expression(-log[10](padj)),
+       color = "Significant",
+       title = "Volcano plot of gene-set enrichment for the bladder dataset") +
+  theme_minimal(base_size = 11)
 ```
