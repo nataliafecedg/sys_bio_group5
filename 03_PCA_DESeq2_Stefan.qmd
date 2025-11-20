@@ -1,0 +1,59 @@
+---
+title: "03_PCA_DESeq2_Stefan"
+format:
+  html: default
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+library(DESeq2)
+library(fgsea)
+library(msigdbr)
+```
+
+### Step 1: Creating the DESeqDataSet object (Organizing the data)
+
+The first step is to organize the data (gene count matrix + sample meta data) into a DESeqDataSet. This can be done using the DESeqDataSetFromMatrix() function, which is described in the DESeq2 vignettte in the “Count matrix input” section.
+
+```{r}
+
+# 0. safety: don't overwrite originals
+meta_orig <- melanoma_metadata
+counts_orig <- melanoma_gene_count
+
+melanoma_metadata <- as.data.frame(melanoma_metadata)
+
+# 1. Set the sample IDs as rownames of the metadata
+rownames(melanoma_metadata) <- melanoma_metadata$sample_id
+
+# 2. Check alignment between metadata and count matrix
+all(rownames(melanoma_metadata) %in% colnames(melanoma_gene_count))   # should be TRUE
+all(rownames(melanoma_metadata) == colnames(melanoma_gene_count))    # TRUE if already in same order
+
+# 3. If not same order, fix it:
+melanoma_gene_count <- melanoma_gene_count[, rownames(melanoma_metadata)]
+
+# 4. Build the DESeq2 dataset
+dds <- DESeqDataSetFromMatrix(
+  countData = melanoma_gene_count,
+  colData   = melanoma_metadata,
+  design    = ~ groups
+)
+dds
+```
+
+### Step 2: PCA (Principal Component Analysis)
+
+```{r}
+vsd <- rlog(dds)   # variance-stabilizing transform
+plotPCA(vsd, intgroup = "groups")
+```
+
+### Step 3: Testing for differential expression
+
+```{r}
+dds <- DESeq(dds)
+res <- results(dds)
+summary(res) sum(res$padj < 0.05, na.rm=TRUE) # number of significant genes
+```
