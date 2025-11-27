@@ -3,3 +3,469 @@ title: "07_integration_fisher"
 format: html
 ---
 
+### **Phase 1: Fisher's Integration & P-value Adjustment**
+
+```{r}
+library(tidyverse)
+library(metap)   # For Fisher's method
+library(DEXSeq)  # To get gene-level splicing p-values
+
+# 1. Prepare Data (Melanoma )
+# ----------------------------------
+# Get gene-level splicing p-values
+dex_gene_pvals <- DEXSeq::perGeneQValue(dexseq_res_melanoma)
+df_splice <- data.frame(gene_id = names(dex_gene_pvals), pvalue_dexseq = dex_gene_pvals)
+
+# Get expression p-values
+df_expr <- as.data.frame(deseq2_res_melanoma) %>%
+  rownames_to_column("gene_id") %>%
+  dplyr::select(gene_id, pvalue_deseq2 = pvalue)
+
+# 2. Merge and Clean (Crucial Step to avoid Errors)
+# -------------------------------------------------
+jointDiffRes <- inner_join(df_expr, df_splice, by = "gene_id") %>%
+  filter(!is.na(pvalue_deseq2) & !is.na(pvalue_dexseq)) %>% # Remove NAs 
+  mutate(
+    # Clamp zeros to avoid log(0) errors
+    pvalue_deseq2 = pmax(pvalue_deseq2, 1e-300),
+    pvalue_dexseq = pmax(pvalue_dexseq, 1e-300)
+  )
+
+# 3. Calculate Fisher's Joint P-value 
+# -------------------------------------------------
+jointDiffResAugmented <- jointDiffRes %>%
+  rowwise() %>%
+  mutate(
+    joint_pval_fisher = metap::sumlog(c(pvalue_deseq2, pvalue_dexseq))$p
+  ) %>%
+  ungroup()
+
+# 4. Calculate FDR Adjusted P-values 
+# ------------------------------------------------
+jointDiffResAugmented <- jointDiffResAugmented %>%
+  mutate(
+    padj_deseq2 = p.adjust(pvalue_deseq2, method = "BH"),
+    padj_dexseq = p.adjust(pvalue_dexseq, method = "BH"),
+    padj_joint  = p.adjust(joint_pval_fisher, method = "BH"),
+    
+    # Create significance flags (< 0.05)
+    sig_deseq2 = padj_deseq2 < 0.05,
+    sig_dexseq = padj_dexseq < 0.05,
+    sig_joint  = padj_joint < 0.05
+  )
+
+```
+
+### **Phase 2: Significance Counts & Unique Genes**
+
+```{r}
+# 1. Count Significant Genes per Method 
+sig_counts <- c(
+  DESeq2 = sum(jointDiffResAugmented$sig_deseq2),
+  DEXSeq = sum(jointDiffResAugmented$sig_dexseq),
+  Joint  = sum(jointDiffResAugmented$sig_joint)
+)
+print(sig_counts)
+
+# 2. Find Unique Integrated Genes 
+# Genes significant in Joint, but NOT in DESeq2 AND NOT in DEXSeq
+unique_joint_genes <- jointDiffResAugmented %>%
+  filter(sig_joint & !sig_deseq2 & !sig_dexseq)
+
+print(paste("Number of unique genes found only by integration:", nrow(unique_joint_genes)))
+
+# View the top unique genes
+head(unique_joint_genes)
+```
+
+### **Phase 3: Gene Set Enrichment Analysis (GSEA)**
+
+```{r}
+library(fgsea)
+library(msigdbr)
+
+# 1. Load Pathways (Biological Process) 
+BP_df <- msigdbr(species = "human", category = "C5", subcategory = "BP")
+BP_list <- split(BP_df$ensembl_gene, BP_df$gs_name)
+
+# 2. Helper Function to Create Ranking Stats [cite: 58-61]
+# Ranks genes by -log10(p-value) so the most significant are at the top
+# Updated function to safely create ranking stats
+create_stats <- function(df, pvalue_col, id_col = "gene_id") {
+  
+  # 1. Calculate -log10(p-value)
+  s <- -log10(df[[pvalue_col]])
+  names(s) <- df[[id_col]]
+  
+  # 2. Fix Infinite values (caused by p-value = 0)
+  # We find the maximum FINITE value and add 10 to the Infs 
+  # so they stay at the top but are essentially "clamped"
+  is_inf <- is.infinite(s)
+  if (any(is_inf)) {
+    max_val <- max(s[!is_inf], na.rm = TRUE)
+    s[is_inf] <- max_val + 10 
+  }
+  
+  # 3. Handle duplicates (keep max stat for each gene ID)
+  s <- tapply(s, names(s), max) 
+  
+  # 4. Sort
+  sort(s, decreasing = TRUE)
+}
+
+# 3. Create Ranked Lists for all 3 methods 
+stats_deseq2 <- create_stats(jointDiffResAugmented, "pvalue_deseq2")
+stats_dexseq <- create_stats(jointDiffResAugmented, "pvalue_dexseq")
+stats_joint  <- create_stats(jointDiffResAugmented, "joint_pval_fisher")
+
+# 4. Run FGSEA 
+# We use scoreType = "pos" because our stats are -log10(p), which are always positive
+run_fgsea_custom <- function(stats, pathways) {
+  fgseaMultilevel(
+    pathways = pathways, 
+    stats = stats, 
+    minSize = 15, 
+    maxSize = 500, 
+    scoreType = "pos" # Matches PDF logic
+  ) %>%
+    arrange(padj)
+}
+
+# Run the analysis for the Joint data
+fgsea_joint_results <- run_fgsea_custom(stats_joint, BP_list)
+
+# 5. View Top Integrated Pathways
+head(fgsea_joint_results, 10)
+```
+
+### **Phase 4: Identifying Unique Pathways**
+
+```{r}
+
+# Run FGSEA for the individual methods too
+fgsea_deseq2_results <- run_fgsea_custom(stats_deseq2, BP_list)
+fgsea_dexseq_results <- run_fgsea_custom(stats_dexseq, BP_list)
+
+# Helper function to get significant pathway names 
+get_sig_paths <- function(res) {
+  res %>% filter(padj < 0.05) %>% pull(pathway)
+}
+
+sig_sets_deseq2 <- get_sig_paths(fgsea_deseq2_results)
+sig_sets_dexseq <- get_sig_paths(fgsea_dexseq_results)
+sig_sets_joint  <- get_sig_paths(fgsea_joint_results)
+
+# Find pathways unique to the Joint analysis 
+unique_joint_pathways_melanoma <- setdiff(sig_sets_joint, union(sig_sets_deseq2, sig_sets_dexseq))
+
+print("Pathways for melanoma found by integrating data:")
+print(unique_joint_pathways_melanoma)
+```
+
+```{r}
+# ==============================================================================
+# PHASE 1: PREPARE & INTEGRATE (BLADDER)
+# ==============================================================================
+
+# 1. Extract P-values from the Bladder Results
+# --------------------------------------------
+# Splicing (DEXSeq): Convert exon results to gene-level p-values
+dex_pvals_blad <- DEXSeq::perGeneQValue(dexseq_res_bladder)
+df_splice_blad <- data.frame(
+  gene_id = names(dex_pvals_blad), 
+  pvalue_dexseq = dex_pvals_blad
+)
+
+# Expression (DESeq2): Extract p-values
+df_expr_blad <- as.data.frame(deseq2_res_bladder) %>%
+  rownames_to_column("gene_id") %>%
+  dplyr::select(gene_id, pvalue_deseq2 = pvalue)
+
+# 2. Merge, Clean, and Clamp (Safety Fixes)
+# -----------------------------------------
+jointDiffRes_Bladder <- inner_join(df_expr_blad, df_splice_blad, by = "gene_id") %>%
+  filter(!is.na(pvalue_deseq2) & !is.na(pvalue_dexseq)) %>%
+  mutate(
+    # Clamp zeros to 1e-300 to prevent Inf errors in Fisher/GSEA
+    pvalue_deseq2 = pmax(pvalue_deseq2, 1e-300),
+    pvalue_dexseq = pmax(pvalue_dexseq, 1e-300)
+  )
+
+# 3. Fisher's Integration & FDR Correction
+# ----------------------------------------
+jointAugmented_Bladder <- jointDiffRes_Bladder %>%
+  rowwise() %>%
+  mutate(
+    # Calculate Fisher's Sum of Logs
+    joint_pval_fisher = metap::sumlog(c(pvalue_deseq2, pvalue_dexseq))$p
+  ) %>%
+  ungroup() %>%
+  mutate(
+    # Adjust all p-values for multiple testing (Benjamini-Hochberg)
+    padj_deseq2 = p.adjust(pvalue_deseq2, method = "BH"),
+    padj_dexseq = p.adjust(pvalue_dexseq, method = "BH"),
+    padj_joint  = p.adjust(joint_pval_fisher, method = "BH"),
+    
+    # Create significance flags
+    sig_deseq2 = padj_deseq2 < 0.05,
+    sig_dexseq = padj_dexseq < 0.05,
+    sig_joint  = padj_joint < 0.05
+  )
+
+# Output counts of significant genes
+print("Significant Gene Counts (Bladder):")
+print(colSums(jointAugmented_Bladder[, c("sig_deseq2", "sig_dexseq", "sig_joint")]))
+
+# ==============================================================================
+# PHASE 2: GSEA PATHWAY ANALYSIS (BLADDER)
+# ==============================================================================
+
+# 1. Create Ranked Lists
+# ----------------------
+# (Uses the 'create_stats' function you defined in the previous step)
+stats_de_blad <- create_stats(jointAugmented_Bladder, "pvalue_deseq2")
+stats_dx_blad <- create_stats(jointAugmented_Bladder, "pvalue_dexseq")
+stats_jt_blad <- create_stats(jointAugmented_Bladder, "joint_pval_fisher")
+
+# 2. Run FGSEA
+# ------------
+# (Uses the 'run_fgsea_custom' function you defined in the previous step)
+fgsea_de_blad <- run_fgsea_custom(stats_de_blad, BP_list)
+fgsea_dx_blad <- run_fgsea_custom(stats_dx_blad, BP_list)
+fgsea_jt_blad <- run_fgsea_custom(stats_jt_blad, BP_list)
+
+# 3. Identify Unique Integrated Pathways
+# --------------------------------------
+get_sig_pathways <- function(res) {
+  res %>% filter(padj < 0.05) %>% pull(pathway)
+}
+
+sets_de <- get_sig_pathways(fgsea_de_blad)
+sets_dx <- get_sig_pathways(fgsea_dx_blad)
+sets_jt <- get_sig_pathways(fgsea_jt_blad)
+
+# Find pathways significant in Joint but NOT in DESeq2 or DEXSeq
+unique_pathways_bladder <- setdiff(sets_jt, union(sets_de, sets_dx))
+
+print("------------------------------------------------")
+print("Pathways found ONLY by integrating Bladder data:")
+print("------------------------------------------------")
+print(unique_pathways_bladder)
+```
+
+```{r}
+# Ensure you saved the melanoma results from the previous turn!
+# (If 'unique_joint_pathways' from Melanoma is still in your environment)
+
+common_hidden_biology <- intersect(unique_joint_pathways_melanoma, unique_pathways_bladder)
+
+print("------------------------------------------------")
+print("Shared 'Hidden' Biology (Found in BOTH cancers via integration):")
+print("------------------------------------------------")
+print(common_hidden_biology)
+```
+
+```{r}
+# 1. Retrieve the FULL list of Integrated Pathways for Melanoma
+# (We need to run this small extraction again if you cleared your environment)
+# Assuming 'fgsea_joint_results' is your Melanoma result object from earlier:
+melanoma_all_joint_paths <- fgsea_joint_results %>% 
+  filter(padj < 0.05) %>% 
+  pull(pathway)
+
+# 2. Retrieve the FULL list of Integrated Pathways for Bladder
+# (Using the variable 'sets_jt' you just created)
+bladder_all_joint_paths <- sets_jt
+
+# 3. Find the Overlap (Universal Mechanisms)
+universal_pathways <- intersect(melanoma_all_joint_paths, bladder_all_joint_paths)
+
+print(paste("Total Integrated Pathways in Melanoma:", length(melanoma_all_joint_paths)))
+print(paste("Total Integrated Pathways in Bladder:", length(bladder_all_joint_paths)))
+print(paste("SHARED Universal Pathways:", length(universal_pathways)))
+
+# 4. View the first few shared pathways (Likely DNA repair, cell cycle)
+head(universal_pathways, 20)
+```
+
+```{r}
+library(tidyverse)
+library(fgsea)
+
+# 1. Prepare the Data (Re-using the dataframe from Approach 1)
+# We start with the joined p-values you already created
+rank_input_bladder <- jointDiffRes_Bladder # From previous step
+
+# 2. Calculate Ranks [cite: 415-434]
+# We rank genes so that the smallest p-value gets the best score (near 1.0)
+N <- nrow(rank_input_bladder)
+
+bladder_ranked <- rank_input_bladder %>%
+  mutate(
+    # Rank 1 = Smallest P-value (Best)
+    # ties.method = "random" ensures NO TIES exist to break GSEA
+    rank_de = rank(pvalue_deseq2, ties.method = "random"),
+    rank_dx = rank(pvalue_dexseq, ties.method = "random"),
+    
+    # Calculate Rank Score (1.0 is best, 0.0 is worst)
+    # Formula matches logic from PDF Page 28 Table [cite: 844]
+    score_de = 1 - (rank_de / (N + 1)),
+    score_dx = 1 - (rank_dx / (N + 1))
+  ) %>%
+  rowwise() %>%
+  mutate(
+    # Integrated Score: Average of the two rank scores [cite: 432]
+    joint_rank_score = mean(c(score_de, score_dx))
+  ) %>%
+  ungroup()
+
+# 3. Create Stats for GSEA
+# We use the new 'joint_rank_score' which goes from 0 to 1
+stats_rank_bladder <- bladder_ranked$joint_rank_score
+names(stats_rank_bladder) <- bladder_ranked$gene_id
+stats_rank_bladder <- sort(stats_rank_bladder, decreasing = TRUE)
+
+# 4. Run FGSEA on Ranked Data
+# We use the same parameters as before
+fgsea_rank_bladder <- fgseaMultilevel(
+  pathways = BP_list,
+  stats = stats_rank_bladder,
+  minSize = 15,
+  maxSize = 500,
+  scoreType = "pos" # Scores are positive (0 to 1)
+) %>%
+  arrange(padj)
+
+# 5. Extract Significant Pathways
+bladder_rank_pathways <- fgsea_rank_bladder %>% 
+  filter(padj < 0.05) %>% 
+  pull(pathway)
+
+print(paste("Significant Bladder Pathways (Rank-Based):", length(bladder_rank_pathways)))
+head(bladder_rank_pathways)
+```
+
+```{r}
+# ==============================================================================
+# FINAL COMPARISON: MELANOMA VS BLADDER
+# ==============================================================================
+
+# 1. Retrieve Melanoma Pathways (P-value Based)
+# (Safety Step: Re-extracting this in case the variable was lost)
+# Assumes 'fgsea_joint_results' is your Melanoma GSEA result from Approach 1
+melanoma_pathways <- fgsea_joint_results %>% 
+  filter(padj < 0.05) %>% 
+  pull(pathway)
+
+# 2. Retrieve Bladder Pathways (Rank Based)
+# (Using the list you just generated)
+bladder_pathways <- bladder_rank_pathways
+
+# 3. Find the Shared "Core" Biology
+universal_pathways <- intersect(melanoma_pathways, bladder_pathways)
+
+# 4. Print Results
+print(paste("Significant Pathways in Melanoma:", length(melanoma_pathways)))
+print(paste("Significant Pathways in Bladder:", length(bladder_pathways)))
+print("------------------------------------------------")
+print(paste("UNIVERSAL CISPLATIN PATHWAYS (Shared):", length(universal_pathways)))
+print("------------------------------------------------")
+print(head(universal_pathways, 20))
+```
+
+```{r}
+library(VennDiagram)
+library(grid)
+
+grid.newpage()
+draw.pairwise.venn(
+  area1 = length(melanoma_pathways),
+  area2 = length(bladder_pathways),
+  cross.area = length(universal_pathways),
+  category = c("Melanoma (P-val)", "Bladder (Rank)"),
+  fill = c("#FF9999", "#99CCFF"),
+  alpha = 0.5,
+  cat.pos = c(-20, 20),
+  scaled = TRUE
+)
+```
+
+```{r}
+library(tidyverse)
+library(metap)
+
+# ==============================================================================
+# HORIZONTAL INTEGRATION: EDGINGTON'S METHOD (CONSENSUS)
+# ==============================================================================
+
+# 1. Prepare the Inputs
+# We use the 'joint_pval' from Step 1 because it represents the total
+# "Cisplatin Effect" (Expression + Splicing) for that tissue.
+
+# Melanoma Input (ensure this object exists from Step 1)
+df_mel <- integrated_melanoma %>% 
+  dplyr::select(gene_id, pval_mel = joint_pval)
+
+# Bladder Input (ensure this object exists from Step 1)
+df_blad <- integrated_bladder %>% 
+  dplyr::select(gene_id, pval_blad = joint_pval)
+
+# 2. Merge the Datasets
+# We use inner_join to find genes detected in BOTH tissues
+consensus_data <- inner_join(df_mel, df_blad, by = "gene_id") %>%
+  # Safety Clamp: Ensure no p-values are exactly 0 or 1 (Edgington requirements)
+  mutate(
+    pval_mel = pmax(pval_mel, 1e-300),
+    pval_blad = pmax(pval_blad, 1e-300)
+  )
+
+# 3. Run Edgington's Method (Sum of P-values) 
+# Edgington's is "Consensus-Driven" - it favors genes with good p-values in BOTH.
+consensus_results <- consensus_data %>%
+  rowwise() %>%
+  mutate(
+    # metap::sump() calculates Edgington's statistic
+    universal_pval = metap::sump(c(pval_mel, pval_blad))$p
+  ) %>%
+  ungroup() %>%
+  mutate(
+    # FDR Correction
+    padj_universal = p.adjust(universal_pval, method = "BH"),
+    is_universal = padj_universal < 0.05
+  )
+
+# 4. View Results
+print("Number of Universal Cisplatin Targets (Edgington's Consensus):")
+print(sum(consensus_results$is_universal))
+
+# View the top genes that represent the "Universal Mechanism"
+top_universal_genes <- consensus_results %>% 
+  arrange(padj_universal) %>% 
+  head(10)
+
+print(top_universal_genes)
+```
+
+```{r}
+# Create stats from the Universal P-value
+stats_universal <- -log10(consensus_results$universal_pval)
+names(stats_universal) <- consensus_results$gene_id
+stats_universal <- sort(stats_universal, decreasing = TRUE)
+
+# Fix infinites if necessary
+if(any(is.infinite(stats_universal))) {
+  max_val <- max(stats_universal[!is.infinite(stats_universal)])
+  stats_universal[is.infinite(stats_universal)] <- max_val + 10
+}
+
+# Run FGSEA
+fgsea_universal <- fgseaMultilevel(
+  pathways = BP_list,
+  stats = stats_universal,
+  minSize = 15, maxSize = 500, scoreType = "pos"
+) %>% arrange(padj)
+
+print("Top Universal Biological Processes:")
+print(head(fgsea_universal$pathway, 10))
+```
+
