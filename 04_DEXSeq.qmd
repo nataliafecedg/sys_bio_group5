@@ -5,6 +5,12 @@ format: html
 
 # DEXSeq
 
+```{r}
+"DEXSeq" %in% rownames(installed.packages())
+packageVersion("DEXSeq")
+sessionInfo()
+```
+
 ## Load libraries
 
 ```{r}
@@ -18,8 +24,8 @@ library(ggplot2)
 ## Metadata preparation
 
 ```{r}
-# MELANOMA METADATA
-melanoma_metadata <- melanoma_metadata %>%
+# MELANOMA METADATA (usiamo la copia originale salvata in 01_load)
+melanoma_metadata <- melanoma_metadata_orig %>%
   dplyr::select(sample = sample_id,
                 condition = Groups) %>%
   dplyr::mutate(
@@ -31,12 +37,12 @@ melanoma_metadata <- melanoma_metadata %>%
 rownames(melanoma_metadata) <- melanoma_metadata$sample
 melanoma_metadata$sample <- NULL
 
-stopifnot( all(rownames(melanoma_metadata) == colnames(melanoma_iso_count)) )
+stopifnot(all(rownames(melanoma_metadata) == colnames(melanoma_iso_count)))
 ```
 
 ```{r}
-# BLADDER METADATA
-bladder_metadata <- bladder_metadata %>% 
+# BLADDER METADATA (usiamo la copia originale salvata in 01_load)
+bladder_metadata <- bladder_metadata_orig %>% 
   dplyr::select(sample = sample_id,
                 condition = Groups) %>% 
   dplyr::mutate(
@@ -48,13 +54,12 @@ bladder_metadata <- bladder_metadata %>%
 rownames(bladder_metadata) <- bladder_metadata$sample
 bladder_metadata$sample <- NULL
 
-stopifnot( all(rownames(bladder_metadata) == colnames(bladder_iso_count)) )
+stopifnot(all(rownames(bladder_metadata) == colnames(bladder_iso_count)))
 ```
 
 ## Transcript–Gene Mapping and Annotation
 
-The code retrieves and aligns **transcript–gene mapping** information, ensuring that the filtered count matrices for **melanoma** and **bladder** samples match the correct **transcript IDs**.
-It then creates **annotated count tables** by joining the mapping data, adding the corresponding **gene IDs** and **gene names** to each **transcript**.
+The code retrieves and aligns **transcript–gene mapping** information, ensuring that the filtered count matrices for **melanoma** and **bladder** samples match the correct **transcript IDs**. It then creates **annotated count tables** by joining the mapping data, adding the corresponding **gene IDs** and **gene names** to each **transcript**.
 
 ```{r}
 #GETTING ISO INFO
@@ -101,20 +106,20 @@ head(blad_counts_annot)
 **Dataset Construction and Differential Exon Usage Testing**: This chunk builds the DEXSeq datasets for melanoma and bladder samples, performs normalization and dispersion estimation, and computes differential exon usage results for each condition.
 
 ```{r}
-dxd_mel <- DEXSeqDataSetFromMatrix(
+dxd_mel <- DEXSeqDataSet(
   countData = melanoma_iso_count_filt,
-  colData    = melanoma_metadata,
-  design     = ~ sample + exon + condition:exon,
-  featureID  = mel_txInfo$transcript_id,
-  groupID    = mel_txInfo$gene_id
+  sampleData = melanoma_metadata,
+  design = ~ sample + exon + condition:exon,
+  featureID = mel_txInfo$transcript_id,
+  groupID = mel_txInfo$gene_id
 )
 
-dxd_blad <- DEXSeqDataSetFromMatrix(
-  countData  = bladder_iso_count_filt,
-  colData    = bladder_metadata,
-  design     = ~ sample + exon + condition:exon,
-  featureID  = blad_txInfo$transcript_id,
-  groupID    = blad_txInfo$gene_id
+dxd_blad <- DEXSeqDataSet(
+  countData = bladder_iso_count_filt,
+  sampleData = bladder_metadata,
+  design = ~ sample + exon + condition:exon,
+  featureID = blad_txInfo$transcript_id,
+  groupID = blad_txInfo$gene_id
 )
 
 dxd_mel  <- estimateSizeFactors(dxd_mel)
@@ -131,8 +136,7 @@ dexseq_res_bladder <- DEXSeqResults(dxd_blad)
 
 ```
 
-**Convert DEU Results to Data Frames:**
-This chunk converts the DEXSeq results objects for melanoma and bladder into data frames, preparing them for downstream filtering and significance analysis.
+**Convert DEU Results to Data Frames:** This chunk converts the DEXSeq results objects for melanoma and bladder into data frames, preparing them for downstream filtering and significance analysis.
 
 ```{r}
 ## MELANOMA ---- CREATE DATAFRAME AND SORT IT BY ADJUSTED P VALUE

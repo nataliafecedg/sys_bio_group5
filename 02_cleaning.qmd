@@ -36,8 +36,7 @@ melanoma_gene_count <- melanoma_gene_count %>%
 
 ## Removing NAs, negative values and non-integer
 
-Before filtering, we perform a sanity check to ensure that the count matrices contain no **NA values**, **negative numbers**, or **non-integer entries**, which would indicate corrupted or improperly loaded data.
-If any anomalies are detected, the script stops to preserve the **quality** and **reliability** of the downstream analysis.
+Before filtering, we perform a sanity check to ensure that the count matrices contain no **NA values**, **negative numbers**, or **non-integer entries**, which would indicate corrupted or improperly loaded data. If any anomalies are detected, the script stops to preserve the **quality** and **reliability** of the downstream analysis.
 
 ```{r}
 # Sanity check: no NA, no negative counts, integer values
@@ -59,6 +58,17 @@ check_counts(bladder_iso_count,  "bladder_iso_count")
 check_counts(melanoma_iso_count, "melanoma_iso_count")
 check_counts(bladder_gene_count, "bladder_gene_count")
 check_counts(melanoma_gene_count,"melanoma_gene_count")
+```
+
+## Creating copies of metadata for later
+
+```{r}
+bladder_metadata <- read_delim("bladder_metadata.csv", delim = ";")
+melanoma_metadata <- read_delim("melanoma_metadata.csv", delim = ";")
+
+bladder_metadata_orig  <- bladder_metadata
+melanoma_metadata_orig <- melanoma_metadata
+
 ```
 
 # Cleaning Isoforms
