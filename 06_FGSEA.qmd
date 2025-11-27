@@ -3,3 +3,94 @@ title: "06_FGSEA"
 format: html
 ---
 
+## Compare to Differential Expression at Gene-set Level:
+
+```{r}
+# Load GO Biological Process (BP) gene sets for human from MSigDB via msigdbr
+BP_df = msigdbr(species = "human", category = "C5", subcategory = "BP")
+
+# Turn the long table of gene–pathway pairs into a list: each element is a pathway, containing its member genes
+BP_list = split(BP_df$ensembl_gene, BP_df$gs_name)
+```
+
+# Melanoma
+
+```{r}
+
+# Create the ranked list of gene-level statistics
+deseq_names <- sub("\\.\\d+$", "", deseq_gene_mel$gene_id)
+deseq_vals <- deseq_gene_mel$stat
+stats_deseq <- setNames(deseq_vals, deseq_names)
+stats_deseq <- stats_deseq[!is.na(stats_deseq)]
+stats_deseq <- sort(stats_deseq, decreasing = TRUE)
+
+# Create the ranked list of isoform-level statistics
+dex_names <- sub("\\.\\d+$", "", dex_gene_mel$gene_id)
+dex_vals <- dex_gene_mel$stat
+stats_dex <- setNames(dex_vals, dex_names)
+stats_dex <- stats_dex[!is.na(stats_dex)]
+stats_dex <- sort(stats_dex, decreasing = TRUE)
+
+fg_deseq <- fgseaMultilevel(pathways = BP_list, stats = stats_deseq,
+minSize = 15, maxSize = 500, scoreType = "std")
+```
+
+```{r}
+fg_dex <- fgseaMultilevel(pathways = BP_list, stats = stats_dex,
+minSize = 15, maxSize = 500, scoreType = "std")
+```
+
+```{r}
+sig_deseq <- fg_deseq %>% filter(padj < alpha) %>% arrange(padj)
+sig_dex <- fg_dex %>% filter(padj < alpha) %>% arrange(padj)
+# counts
+n_sig_de <- nrow(sig_deseq)
+n_sig_dx <- nrow(sig_dex)
+# shared pathways (by name)
+shared <- intersect(sig_deseq$pathway, sig_dex$pathway)
+n_shared <- length(shared)
+
+```
+
+```{r}
+# Keep just what we need and rename
+de_df <- fg_deseq %>%
+transmute(pathway, NES_de = NES, padj_de = padj)
+dx_df <- fg_dex %>%
+transmute(pathway, NES_dx = NES, padj_dx = padj)
+# Merge on pathway (shared sets only)
+cmp <- inner_join(de_df, dx_df, by = "pathway") %>%
+mutate(sig_cat = case_when(
+padj_de < alpha & padj_dx < alpha ~ "Both",
+padj_de < alpha & padj_dx >= alpha ~ "DESeq2 only",
+padj_de >= alpha & padj_dx < alpha ~ "DEXSeq only",
+TRUE ~ "None"
+)) %>%
+mutate(sig_cat = factor(sig_cat, levels = c("Both","DESeq2 only","DEXSeq
+↪ only","None")))
+
+```
+
+```{r}
+# Scatter + smooth
+ggplot(cmp, aes(x = NES_de, y = NES_dx, color = sig_cat)) +
+geom_point(alpha = 0.8) +
+geom_smooth(method = "lm", se = FALSE) +
+labs(
+x = "NES (DESeq2 fgsea)",
+y = "NES (DEXSeq fgsea)",
+color = "Significance",
+title = "NES comparison: DESeq2 vs DEXSeq (fgseaMultilevel)"
+) +
+theme_minimal()
+
+```
+
+## Overall spearman correlation of the NES scores:
+
+```{r}
+spearman_cor <- cor(cmp$NES_de, cmp$NES_dx, method = "spearman", use =
+↪ "complete.obs")
+spearman_cor
+
+```
