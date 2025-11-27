@@ -4,7 +4,7 @@ format: html
 ---
 
 ```{r}
-library(dplyr) 
+library(dplyr)
 library(tibble)
 ```
 
@@ -154,7 +154,7 @@ contig_tab_blad <- table(
 contig_tab_blad
 ```
 
-# Some useful plots: 
+# Some useful plots:
 
 # - ORA
 
