@@ -1,0 +1,29 @@
+---
+title: "00_all"
+format: html
+---
+
+## 2. RUN (not render) all .qmd in sequence
+
+```{r}
+files_to_run <- c(
+  "01_load.qmd",
+  "02_cleaning.qmd",
+  "03_PCA_DESeq2.qmd",
+  "04_DEXSeq.qmd",
+  "05_compare_DESeq2_DEXSeq.qmd",
+  "06_FGSEA.qmd",
+  "07_integration_fisher.qmd"
+)
+```
+
+## 3. Run each file without producing HTML
+
+```{r}
+for (f in files_to_run) {
+message("\n=== RUNNING: ", f, " ===")
+quarto::quarto_run(f)
+}
+
+message("\nAll scripts executed successfully!")
+```

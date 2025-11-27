@@ -3,6 +3,19 @@ title: "01_load"
 format: html
 ---
 
+## Create 'plots' folder
+
+```{r}
+plots_dir <- file.path(getwd(), "plots")
+
+if (!dir.exists(plots_dir)) {
+dir.create(plots_dir)
+message("Created folder: ", plots_dir)
+} else {
+message("Folder already exists: ", plots_dir)
+}
+```
+
 ## Preparation
 
 ```{r}

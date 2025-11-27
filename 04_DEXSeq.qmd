@@ -1,23 +1,24 @@
 ---
-title: "DEXSeq"
+title: "04_DEXSeq"
 format: html
 ---
 
-Load Libraries
+# DEXSeq
+
+## Load libraries
 
 ```{r}
 library(DEXSeq)
-library(fgsea)
-library(msigdbr)
 library(tidyverse)
 library(dplyr)
-library(tibble) 
+library(tibble)
+library(ggplot2)
 ```
 
-# Metadata preparation
+## Metadata preparation
 
 ```{r}
-#MELANOMA METADATA
+# MELANOMA METADATA
 melanoma_metadata <- melanoma_metadata %>%
   dplyr::select(sample = sample_id,
                 condition = Groups) %>%
@@ -25,9 +26,12 @@ melanoma_metadata <- melanoma_metadata %>%
     condition = factor(condition,
                        levels = c("untreated", "treated"))
   ) %>%
-  tibble::column_to_rownames("sample")
+  as.data.frame()
 
-all(rownames(melanoma_metadata) == colnames(melanoma_iso_count)) #control
+rownames(melanoma_metadata) <- melanoma_metadata$sample
+melanoma_metadata$sample <- NULL
+
+stopifnot( all(rownames(melanoma_metadata) == colnames(melanoma_iso_count)) )
 ```
 
 ```{r}
@@ -39,10 +43,18 @@ bladder_metadata <- bladder_metadata %>%
     condition = factor(condition,
                        levels = c("untreated", "treated"))
   ) %>% 
-  tibble::column_to_rownames("sample")
+  as.data.frame()
 
-all(rownames(bladder_metadata) == colnames(bladder_iso_count)) # control
+rownames(bladder_metadata) <- bladder_metadata$sample
+bladder_metadata$sample <- NULL
+
+stopifnot( all(rownames(bladder_metadata) == colnames(bladder_iso_count)) )
 ```
+
+## Transcript–Gene Mapping and Annotation
+
+The code retrieves and aligns **transcript–gene mapping** information, ensuring that the filtered count matrices for **melanoma** and **bladder** samples match the correct **transcript IDs**.
+It then creates **annotated count tables** by joining the mapping data, adding the corresponding **gene IDs** and **gene names** to each **transcript**.
 
 ```{r}
 #GETTING ISO INFO
@@ -54,9 +66,18 @@ iso_gene_map <- isoInfo %>%
   )
 head(iso_gene_map)
 
+# mappa trascritto-gene per MELANOMA (matrice filtrata)
+mel_txInfo <- iso_gene_map[match(rownames(melanoma_iso_count_filt),
+                                 iso_gene_map$transcript_id), ]
+stopifnot(all(mel_txInfo$transcript_id == rownames(melanoma_iso_count_filt)))
+
+# mappa trascritto-gene per BLADDER (matrice filtrata)
+blad_txInfo <- iso_gene_map[match(rownames(bladder_iso_count_filt),
+                                  iso_gene_map$transcript_id), ]
+stopifnot(all(blad_txInfo$transcript_id == rownames(bladder_iso_count_filt)))
 
 #CREATE MELANOMA ASSOCIATIONS
-mel_counts_annot <- melanoma_iso_count %>%
+mel_counts_annot <- melanoma_iso_count_filt %>%
   as.data.frame() %>%
   tibble::rownames_to_column("transcript_id") %>%
   dplyr::left_join(iso_gene_map, by = "transcript_id") %>%
@@ -66,7 +87,7 @@ head(mel_counts_annot)
 
 
 #CREATE BLADDER ASSOCIATIONS
-blad_counts_annot <- bladder_iso_count %>%
+blad_counts_annot <- bladder_iso_count_filt %>%
   as.data.frame() %>%
   tibble::rownames_to_column("transcript_id") %>%
   dplyr::left_join(iso_gene_map, by = "transcript_id") %>%
@@ -75,28 +96,26 @@ blad_counts_annot <- bladder_iso_count %>%
 head(blad_counts_annot)
 ```
 
-\
-\
+## DEXSeq analysis
 
-# DEXSeq
+**Dataset Construction and Differential Exon Usage Testing**: This chunk builds the DEXSeq datasets for melanoma and bladder samples, performs normalization and dispersion estimation, and computes differential exon usage results for each condition.
 
 ```{r}
-dxd_mel <- DEXSeqDataSet(
-  countData  = melanoma_iso_count,
-  sampleData = melanoma_metadata,
+dxd_mel <- DEXSeqDataSetFromMatrix(
+  countData = melanoma_iso_count_filt,
+  colData    = melanoma_metadata,
   design     = ~ sample + exon + condition:exon,
   featureID  = mel_txInfo$transcript_id,
   groupID    = mel_txInfo$gene_id
 )
 
-dxd_blad <- DEXSeqDataSet(
-  countData  = bladder_iso_count,
-  sampleData = bladder_metadata,
+dxd_blad <- DEXSeqDataSetFromMatrix(
+  countData  = bladder_iso_count_filt,
+  colData    = bladder_metadata,
   design     = ~ sample + exon + condition:exon,
   featureID  = blad_txInfo$transcript_id,
   groupID    = blad_txInfo$gene_id
 )
-
 
 dxd_mel  <- estimateSizeFactors(dxd_mel)
 dxd_mel  <- estimateDispersions(dxd_mel)
@@ -112,24 +131,17 @@ dexseq_res_bladder <- DEXSeqResults(dxd_blad)
 
 ```
 
+**Convert DEU Results to Data Frames:**
+This chunk converts the DEXSeq results objects for melanoma and bladder into data frames, preparing them for downstream filtering and significance analysis.
+
 ```{r}
 ## MELANOMA ---- CREATE DATAFRAME AND SORT IT BY ADJUSTED P VALUE
 dex_mel_df <- as.data.frame(dexseq_res_melanoma)
-dex_mel_df <- dex_mel_df[order(dex_mel_df$padj), ]
-top5_genes_mel  <- dex_mel_df$groupID[!is.na(dex_mel_df$padj)][1:5]
-
 ## BLADDER ---- CREATE DATAFRAME AND SORT IT BY ADJUSTED P VALUE
 dex_blad_df <- as.data.frame(dexseq_res_bladder)
-dex_blad_df <- dex_blad_df[order(dex_blad_df$padj), ]
-top5_genes_blad <- dex_blad_df$groupID[!is.na(dex_blad_df$padj)][1:5]
-
-
 ```
 
-```{r}
-top5_genes_mel
-top5_genes_blad
-```
+**Identify Significant Isoforms and Genes:** This chunk filters DEU results by adjusted p-value to quantify the number of significantly affected isoforms and the corresponding unique genes.
 
 ```{r}
 alpha <- 0.05
@@ -158,3 +170,69 @@ n_sig_isoforms_blad
 n_sig_genes_blad <- length(unique(sig_iso_blad$groupID))
 n_sig_genes_blad
 ```
+
+# Plots
+
+## Volcano plot
+
+```{r}
+### MELANOMA VOLCANO ----
+dex_mel_df$mlog10padj <- -log10(dex_mel_df$padj)
+lfc_mel <- dex_mel_df %>% dplyr::select(starts_with("log2fold_")) %>% pull()
+p <- ggplot(dex_mel_df, aes(x = lfc_mel, y = mlog10padj)) +
+  geom_point(aes(color = padj < 0.05), alpha = 0.7) +
+  scale_color_manual(values = c("grey70", "red")) +
+  geom_hline(yintercept = -log10(0.05), linetype = 2) +
+  labs(
+    title = "DEXSeq Volcano Plot – Melanoma",
+    x = "log2 Fold Change (Exon usage)",
+    y = "-log10(padj)",
+    color = "Significant\n(padj < 0.05)"
+  ) +
+  theme_minimal()
+
+ggsave(filename = file.path(plots_dir, "DEXSeq Volcano Plot (Melanoma).png"), plot = p, width = 8, height = 6, dpi = 300)
+
+### BLADDER VOLCANO ----
+dex_blad_df$mlog10padj <- -log10(dex_blad_df$padj)
+lfc_blad <- dex_blad_df %>% dplyr::select(starts_with("log2fold_")) %>% pull()
+p <- ggplot(dex_blad_df, aes(x = lfc_blad, y = mlog10padj)) +
+  geom_point(aes(color = padj < 0.05), alpha = 0.7) +
+  scale_color_manual(values = c("grey70", "red")) +
+  geom_hline(yintercept = -log10(0.05), linetype = 2) +
+  labs(
+    title = "DEXSeq Volcano Plot – Bladder",
+    x = "log2 Fold Change (Exon usage)",
+    y = "-log10(padj)",
+    color = "Significant\n(padj < 0.05)"
+  ) +
+  theme_minimal()
+
+ggsave(filename = file.path(plots_dir, "DEXSeq Volcano Plot (Bladder).png"), plot = p, width = 8, height = 6, dpi = 300)
+```
+
+## Ma plot
+
+```{r}
+### MELANOMA MA-PLOT ----
+p <- plotMA(
+  dexseq_res_melanoma,
+  main = "DEXSeq MA Plot – Melanoma",
+  cex = 0.5
+)
+
+ggsave(filename = file.path(plots_dir, "DEXSeq MA Plot (Melanoma).png"), plot = p, width = 8, height = 6, dpi = 300)
+
+### BLADDER MA-PLOT ----
+p <- plotMA(
+  dexseq_res_bladder,
+  main = "DEXSeq MA Plot – Bladder",
+  cex = 0.5
+)
+
+ggsave(filename = file.path(plots_dir, "DEXSeq MA Plot (Bladder).png"), plot = p, width = 8, height = 6, dpi = 300)
+```
+
+## Heatmap
+
+## 

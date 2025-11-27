@@ -1,5 +1,5 @@
 ---
-title: "03_PCA_DESeq2_Stefan"
+title: "03_PCA_DESeq2"
 format:
   html: default
 editor: visual
@@ -47,7 +47,8 @@ dds_melanoma
 
 ```{r}
 vsd_melanoma <- rlog(dds_melanoma)   # variance-stabilizing transform
-plotPCA(vsd_melanoma, intgroup = "Groups")
+p <- plotPCA(vsd_melanoma, intgroup = "Groups")
+ggsave(filename = file.path(plots_dir, "PCA_melanoma.png"), plot = p, width = 8, height = 6, dpi = 300)
 ```
 
 ### Step 3: Testing for differential expression
@@ -84,13 +85,14 @@ dds_bladder <- DESeqDataSetFromMatrix(
 dds_bladder
 
 vsd_bladder <- rlog(dds_bladder)   # variance-stabilizing transform
-plotPCA(vsd_bladder, intgroup = "Groups")
+p <- plotPCA(vsd_bladder, intgroup = "Groups")
 
 dds_bladder <- DESeq(dds_bladder)
 deseq2_res_bladder <- results(dds_bladder)
 summary(deseq2_res_bladder)
 sum(deseq2_res_bladder$padj < 0.05, na.rm=TRUE) # number of significant genes
 
+ggsave(filename = file.path(plots_dir, "PCA_bladder.png"), plot = p, width = 8, height = 6, dpi = 300)
 ```
 
 ### **Gene Set Enrichment Analysis (Specifically FCS)**
@@ -161,13 +163,15 @@ fg_sig_melanoma <- fgseaRes_melanoma %>%
 chosen_pathway_melanoma <- fg_sig_melanoma$pathway[1]
 
 # plot enrichment
-plotEnrichment(BP_list[[chosen_pathway_melanoma]], myStats_melanoma) +
+p <- plotEnrichment(BP_list[[chosen_pathway_melanoma]], myStats_melanoma) +
   ggplot2::labs(title = paste0("Enrichment: ", chosen_pathway_melanoma))
 
 # extract first 3 leading-edge genes
 leading_melanoma <- fg_sig_melanoma$leadingEdge[[1]]
 first_genes_melanoma <- head(leading_melanoma, 3)
 first_genes_melanoma
+
+ggsave(filename = file.path(plots_dir, "DESeq2_enrichment_melanoma.png"), plot = p, width = 8, height = 6, dpi = 300)
 ```
 
 Bladder
@@ -182,13 +186,15 @@ fg_sig_bladder <- fgseaRes_bladder %>%
 chosen_pathway_bladder <- fg_sig_bladder$pathway[1]
 
 # plot enrichment
-plotEnrichment(BP_list[[chosen_pathway_bladder]], myStats_bladder) +
+p <- plotEnrichment(BP_list[[chosen_pathway_bladder]], myStats_bladder) +
   ggplot2::labs(title = paste0("Enrichment: ", chosen_pathway_bladder))
 
 # extract first 3 leading-edge genes
 leading <- fg_sig_bladder$leadingEdge[[1]]
 first_genes_bladder <- head(leading, 3)
 first_genes_bladder
+
+ggsave(filename = file.path(plots_dir, "DESeq2_enrichment_bladder.png"), plot = p, width = 8, height = 6, dpi = 300)
 ```
 
 **Non-directional on melanoma:**
@@ -216,7 +222,7 @@ fg_volcano_melanoma <- fgseaRes_melanoma %>%
 to_label <- fg_volcano_melanoma %>% arrange(padj) %>% slice_head(n = 10)
 
 library(ggrepel)
-ggplot(fg_volcano_melanoma, aes(x = NES, y = mlog10padj, color = sig)) +
+p <- ggplot(fg_volcano_melanoma, aes(x = NES, y = mlog10padj, color = sig)) +
   geom_point(alpha = 0.8) +
   geom_hline(yintercept = -log10(0.05), linetype = 2) +
   geom_text_repel(data = to_label,
@@ -229,6 +235,8 @@ ggplot(fg_volcano_melanoma, aes(x = NES, y = mlog10padj, color = sig)) +
        color = "Significant",
        title = "Volcano plot of gene-set enrichment for the melanoma dataset") +
   theme_minimal(base_size = 11)
+p
+ggsave(filename = file.path(plots_dir, "DESeq2 Volcano plot (Melanoma).png"), plot = p, width = 8, height = 6, dpi = 300)
 ```
 
 **Non-directional on bladder:**
@@ -255,7 +263,7 @@ fg_volcano_bladder <- fgseaRes_bladder %>%
 
 to_label <- fg_volcano_bladder %>% arrange(padj) %>% slice_head(n = 10)
 
-ggplot(fg_volcano_bladder, aes(x = NES, y = mlog10padj, color = sig)) +
+p <- ggplot(fg_volcano_bladder, aes(x = NES, y = mlog10padj, color = sig)) +
   geom_point(alpha = 0.8) +
   geom_hline(yintercept = -log10(0.05), linetype = 2) +
   geom_text_repel(data = to_label,
@@ -268,4 +276,29 @@ ggplot(fg_volcano_bladder, aes(x = NES, y = mlog10padj, color = sig)) +
        color = "Significant",
        title = "Volcano plot of gene-set enrichment for the bladder dataset") +
   theme_minimal(base_size = 11)
+p
+ggsave(filename = file.path(plots_dir, "DESeq2 Volcano plot (Bladder).png"), plot = p, width = 8, height = 6, dpi = 300)
+```
+
+## Cleaning environment
+
+```{r}
+rm(
+  melanoma_meta_orig, melanoma_counts_orig,
+  bladder_meta_orig, bladder_counts_orig,
+  BP_df,
+  myStats_melanoma, myStats_bladder,
+  clean_names_melanoma, clean_names_bladder,
+  fg_sig_melanoma, fg_sig_bladder,
+  stats_abs_melanoma, stats_abs_bladder,
+  fg_nondir_melanoma, fg_nondir_bladder,
+  fg_volcano_melanoma, fg_volcano_bladder,
+  to_label,
+  chosen_pathway_melanoma, chosen_pathway_bladder,
+  leading_melanoma, leading,
+  first_genes_melanoma, first_genes_bladder,
+  p
+)
+gc()
+
 ```

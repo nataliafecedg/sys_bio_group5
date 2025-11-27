@@ -1,0 +1,224 @@
+---
+title: "02_cleaning"
+format: html
+---
+
+# Cleaning
+
+Cleaning up the data to include only our selected samples
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+```
+
+## Selecting samples of interest
+
+The chunk **selects** from the count matrices only the **columns** corresponding to the **bladder** and **melanoma samples** of interest.\
+This produces **filtered datasets** that include exclusively the **specified samples** for **subsequent analyses**.
+
+```{r}
+bladder_samples = c("GSM7494390", "GSM7494391", "GSM7494392", "GSM7494400", "GSM7494401", "GSM7494402", "GSM7494403")
+melanoma_samples = c("GSM6395044", "GSM6395045", "GSM6395046", "GSM6395050", "GSM6395051", "GSM6395052")
+
+# Data
+bladder_iso_count <- bladder_iso_count[, bladder_samples]
+
+melanoma_iso_count <- melanoma_iso_count[, melanoma_samples]
+
+bladder_gene_count <- bladder_gene_count %>%
+  dplyr::select(all_of(bladder_samples))
+
+melanoma_gene_count <- melanoma_gene_count %>%
+  dplyr::select(all_of(melanoma_samples))
+```
+
+## Removing NAs, negative values and non-integer
+
+Before filtering, we perform a sanity check to ensure that the count matrices contain no **NA values**, **negative numbers**, or **non-integer entries**, which would indicate corrupted or improperly loaded data.
+If any anomalies are detected, the script stops to preserve the **quality** and **reliability** of the downstream analysis.
+
+```{r}
+# Sanity check: no NA, no negative counts, integer values
+check_counts <- function(mat, name) {
+  cat("\nChecking", name, "...\n")
+  n_na  <- sum(is.na(mat))
+  n_neg <- sum(mat < 0, na.rm = TRUE)
+  cat("  NAs:     ", n_na, "\n")
+  cat("  Negative:", n_neg, "\n")
+  if (n_na > 0)  stop(name, " contains NA values. Please fix the input.")
+  if (n_neg > 0) stop(name, " contains negative counts. Please fix the input.")
+
+  if (!all(mat == floor(mat))) {
+    warning(name, " contains non-integer values.")
+  }
+}
+
+check_counts(bladder_iso_count,  "bladder_iso_count")
+check_counts(melanoma_iso_count, "melanoma_iso_count")
+check_counts(bladder_gene_count, "bladder_gene_count")
+check_counts(melanoma_gene_count,"melanoma_gene_count")
+```
+
+# Cleaning Isoforms
+
+## Plotting expressions before filtering
+
+```{r}
+df_bladder <- as.data.frame(bladder_iso_count) %>%
+  pivot_longer(cols = everything(), names_to = "sample", values_to = "count") %>%
+  mutate(log_expr = log2(count + 1))
+
+p <- ggplot(df_bladder, aes(x = log_expr)) +
+  geom_histogram(bins = 100, fill = "steelblue", color = "black") +
+  theme_minimal() +
+  labs(
+    title = "Distribution of Isoform Expression (Bladder)",
+    x = "log2(count + 1)",
+    y = "Number of Isoforms"
+  )
+p
+ggsave(filename = file.path(plots_dir, "Raw Isoform Expression (Bladder).png"), plot = p, width = 8, height = 6, dpi = 300)
+#------------------------------------------------------------------------------------------------------------------------------------
+
+df_melanoma <- as.data.frame(melanoma_iso_count) %>%
+  pivot_longer(cols = everything(), names_to = "sample", values_to = "count") %>%
+  mutate(log_expr = log2(count + 1))
+
+p <- ggplot(df_melanoma, aes(x = log_expr)) +
+  geom_histogram(bins = 100, fill = "tomato", color = "black") +
+  theme_minimal() +
+  labs(
+    title = "Distribution of Isoform Expression (Melanoma)",
+    x = "log2(count + 1)",
+    y = "Number of Isoforms"
+  )
+p
+ggsave(filename = file.path(plots_dir, "Raw Isoform Expression (Melanoma).png"), plot = p, width = 8, height = 6, dpi = 300)
+```
+
+## Filtering Isoforms
+
+```{r}
+filter_isoforms_prof <- function(count_matrix, min_count = 10) {
+  min_samples <- ceiling(ncol(count_matrix) * 0.5)
+  keep <- rowSums(count_matrix >= min_count) >= min_samples
+  filtered <- count_matrix[keep, , drop = FALSE]
+
+  cat("\n--------------------------------------\n")
+  cat("Filtering summary\n")
+  cat("--------------------------------------\n")
+  cat("Isoforms before filtering: ", nrow(count_matrix), "\n")
+  cat("Isoforms kept:             ", nrow(filtered), "\n")
+  cat("Isoforms removed:          ", nrow(count_matrix) - nrow(filtered), "\n")
+  cat("Minimum samples required:  ", min_samples, "\n")
+  cat("--------------------------------------\n\n")
+
+  return(filtered)
+}
+
+cat("### Bladder dataset ###\n")
+bladder_iso_count_filt  <- filter_isoforms_prof(bladder_iso_count)
+cat("### Melanoma dataset ###\n")
+melanoma_iso_count_filt <- filter_isoforms_prof(melanoma_iso_count)
+
+```
+
+## Plotting expressions after filtering
+
+```{r}
+df_bladder_filt <- as.data.frame(bladder_iso_count_filt) %>%
+  pivot_longer(cols = everything(), names_to = "sample", values_to = "count") %>%
+  mutate(log_expr = log2(count + 1))
+
+p <- ggplot(df_bladder_filt, aes(x = log_expr)) +
+  geom_histogram(bins = 100, fill = "steelblue", color = "black") +
+  theme_minimal() +
+  labs(
+    title = "Filtered Isoform Expression (Bladder)",
+    x = "log2(count + 1)",
+    y = "Number of Isoforms"
+  )
+
+ggsave(filename = file.path(plots_dir, "Filtered Isoform Expression (Bladder).png"), plot = p, width = 8, height = 6, dpi = 300)
+#------------------------------------------------------------------------------------------------------------------------------------
+
+df_melanoma_filt <- as.data.frame(melanoma_iso_count_filt) %>%
+  pivot_longer(cols = everything(), names_to = "sample", values_to = "count") %>%
+  mutate(log_expr = log2(count + 1))
+p 
+p <- ggplot(df_melanoma_filt, aes(x = log_expr)) +
+  geom_histogram(bins = 100, fill = "tomato", color = "black") +
+  theme_minimal() +
+  labs(
+    title = "Filtered Isoform Expression (Melanoma)",
+    x = "log2(count + 1)",
+    y = "Number of Isoforms"
+  )
+p
+ggsave(filename = file.path(plots_dir, "Filtered Isoform Expression (Melanoma).png"), plot = p, width = 8, height = 6, dpi = 300)
+```
+
+## Filtering stats
+
+```{r}
+### GENERAL DATASET CHECK (compact version) ###
+
+check_dataset <- function(original_matrix, filtered_matrix, name, min_count = 10) {
+
+  min_samples <- ceiling(ncol(original_matrix) * 0.5)
+
+  expr_before <- as.numeric(original_matrix)
+  expr_after  <- as.numeric(filtered_matrix)
+
+  cat("\n====================", name, "====================\n")
+
+  cat("Samples:", ncol(original_matrix), "\n")
+  cat("Isoforms before:", nrow(original_matrix), "\n")
+  cat("Isoforms after: ", nrow(filtered_matrix), "\n")
+  cat("Removed:        ", nrow(original_matrix) - nrow(filtered_matrix),
+      sprintf(" (%.2f%%)\n", 
+              100 * (1 - nrow(filtered_matrix) / nrow(original_matrix))))
+
+  # Check rules
+  rs <- rowSums(filtered_matrix >= min_count)
+  cat("Rule check (>=10 counts in >=", min_samples, "samples): ",
+      all(rs >= min_samples), "\n\n")
+
+  cat("---- Expression BEFORE ----\n")
+  cat("Min:", min(expr_before),
+      " Max:", max(expr_before),
+      " Median:", median(expr_before),
+      " Mean:", round(mean(expr_before), 2),
+      " Zeros:", sum(expr_before == 0), "\n\n")
+
+  cat("---- Expression AFTER ----\n")
+  cat("Min:", min(expr_after),
+      " Max:", max(expr_after),
+      " Median:", median(expr_after),
+      " Mean:", round(mean(expr_after), 2),
+      " Zeros:", sum(expr_after == 0), "\n")
+
+  cat("====================================================\n\n")
+}
+
+# Run checks
+check_dataset(bladder_iso_count, bladder_iso_count_filt, "BLADDER")
+check_dataset(melanoma_iso_count, melanoma_iso_count_filt, "MELANOMA")
+
+```
+
+## Cleaning metadata
+
+```{r}
+bladder_metadata  <- bladder_metadata  %>% filter(sample_id %in% bladder_samples)
+melanoma_metadata <- melanoma_metadata %>% filter(sample_id %in% melanoma_samples)
+```
+
+## Cleaning environment
+
+```{r}
+rm(df_bladder, df_melanoma, df_bladder_filt, df_melanoma_filt, p, check_dataset, filter_isoforms_prof)
+gc()
+```
