@@ -6,6 +6,7 @@ format: html
 ## Compare to Differential Expression at Gene-set Level:
 
 ```{r}
+alpha <- 0.05
 # Load GO Biological Process (BP) gene sets for human from MSigDB via msigdbr
 BP_df = msigdbr(species = "human", category = "C5", subcategory = "BP")
 
@@ -66,9 +67,7 @@ padj_de < alpha & padj_dx >= alpha ~ "DESeq2 only",
 padj_de >= alpha & padj_dx < alpha ~ "DEXSeq only",
 TRUE ~ "None"
 )) %>%
-mutate(sig_cat = factor(sig_cat, levels = c("Both","DESeq2 only","DEXSeq
-↪ only","None")))
-
+mutate(sig_cat = factor(sig_cat, levels = c("Both","DESeq2 only","DEXSeq only","None")))
 ```
 
 ```{r}
@@ -100,8 +99,8 @@ spearman_cor
 ## Visualize overlaps
 
 ```{r}
-#library(VennDiagram)
-#library(grid)
+library(VennDiagram)
+library(grid)
 ```
 
 ```{r}
@@ -162,6 +161,20 @@ grid.text(
 
 ```
 
+```{r}
+# --- Save melanoma objects ---
+stats_deseq_mel <- stats_deseq
+stats_dex_mel   <- stats_dex
+fg_deseq_mel    <- fg_deseq
+fg_dex_mel      <- fg_dex
+sig_deseq_mel   <- sig_deseq
+sig_dex_mel     <- sig_dex
+de_df_mel       <- de_df
+dx_df_mel       <- dx_df
+cmp_mel         <- cmp
+spearman_cor_mel <- spearman_cor
+```
+
 # Bladder
 
 ```{r}
@@ -213,26 +226,7 @@ padj_de < alpha & padj_dx >= alpha ~ "DESeq2 only",
 padj_de >= alpha & padj_dx < alpha ~ "DEXSeq only",
 TRUE ~ "None"
 )) %>%
-mutate(sig_cat = factor(sig_cat, levels = c("Both","DESeq2 only","DEXSeq
-↪ only","None")))
-```
-
-```{r}
-# Keep just what we need and rename
-de_df <- fg_deseq %>%
-transmute(pathway, NES_de = NES, padj_de = padj)
-dx_df <- fg_dex %>%
-transmute(pathway, NES_dx = NES, padj_dx = padj)
-# Merge on pathway (shared sets only)
-cmp <- inner_join(de_df, dx_df, by = "pathway") %>%
-mutate(sig_cat = case_when(
-padj_de < alpha & padj_dx < alpha ~ "Both",
-padj_de < alpha & padj_dx >= alpha ~ "DESeq2 only",
-padj_de >= alpha & padj_dx < alpha ~ "DEXSeq only",
-TRUE ~ "None"
-)) %>%
-mutate(sig_cat = factor(sig_cat, levels = c("Both","DESeq2 only","DEXSeq
-↪ only","None")))
+mutate(sig_cat = factor(sig_cat, levels = c("Both","DESeq2 only","DEXSeq only","None")))
 ```
 
 ```{r}
@@ -316,4 +310,21 @@ grid.text(
   y = unit(0.92, "npc"),
   gp = gpar(fontsize = 12, fontface = "italic")
 )
+```
+
+```{r}
+# --- Save bladder objects ---
+stats_deseq_bl <- stats_deseq
+stats_dex_bl   <- stats_dex
+fg_deseq_bl    <- fg_deseq
+fg_dex_bl      <- fg_dex
+sig_deseq_bl   <- sig_deseq
+sig_dex_bl     <- sig_dex
+de_df_bl       <- de_df
+dx_df_bl       <- dx_df
+cmp_bl         <- cmp
+spearman_cor_bl <- spearman_cor
+
+rm(stats_deseq, stats_dex, fg_deseq, fg_dex, sig_deseq, sig_dex,
+   de_df, dx_df, cmp, spearman_cor)
 ```
