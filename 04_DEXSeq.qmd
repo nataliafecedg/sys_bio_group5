@@ -3,6 +3,10 @@ title: "04_DEXSeq"
 format: html
 ---
 
+```{r}
+options(bitmapType = "cairo") #FOR THE PLOTS
+```
+
 # DEXSeq
 
 ## Load libraries
@@ -255,7 +259,6 @@ plotMA(dexseq_res_melanoma,
        main = "DEXSeq MA Plot – Melanoma",
        cex = 0.5)
 dev.off()
-
 ### BLADDER MA-PLOT ----
 png(file.path(plots_dir, "DEXSeq_MA_Plot_Bladder.png"),
     width = 8, height = 6, units = "in", res = 300)
@@ -263,6 +266,17 @@ plotMA(dexseq_res_bladder,
        main = "DEXSeq MA Plot – Bladder",
        cex = 0.5)
 dev.off()
+
+### MELANOMA MA-PLOT (solo schermo) ----
+plotMA(dexseq_res_melanoma,
+       main = "DEXSeq MA Plot – Melanoma",
+       cex = 0.5)
+
+### BLADDER MA-PLOT (solo schermo) ----
+plotMA(dexseq_res_bladder,
+       main = "DEXSeq MA Plot – Bladder",
+       cex = 0.5)
+
 ```
 
 **In the melanoma MA plot**, almost all the points are concentrated around the horizontal zero line: this indicates that most exons exhibit minimal differences in usage between treated and untreated subjects. Furthermore, the red points, representing exons significantly altered by treatment, are relatively few and distributed narrowly along the vertical axis (log2 fold-change). The lack of large upward or downward deviations (absence of many values ​​\>1 or \<-1) confirms that the drug induces only modest splicing changes. In other words, reading the graph, it is clear that in melanoma, the effect of treatment on splicing is present but limited.

@@ -1,0 +1,155 @@
+---
+title: "05_compare_DESeq2_DEXSeq"
+format: html
+---
+
+```{r}
+library(dplyr)
+library(tibble)
+```
+
+## Melanoma:
+
+First, summarize the DEXSeq results to gene-level
+
+```{r}
+dexseqResultGene_mel <-
+  dexseq_res_melanoma %>%
+  as.data.frame() %>%
+  as_tibble() %>%
+  # keep only rows with a valid test statistic
+  filter(!is.na(stat)) %>%
+  # select and rename the important columns
+  dplyr::select(
+    gene_id    = groupID,
+    isoform_id = featureID,
+    stat,
+    log2FC     = dplyr::starts_with("log2fold_"),
+    pvalue,
+    padj
+  ) %>%
+  # per-gene: keep only the isoform with the smallest p-value
+  group_by(gene_id) %>%
+  slice_min(
+    order_by  = pvalue,
+    n         = 1,
+    with_ties = FALSE
+  ) %>%
+  ungroup() %>%
+  # recompute FDR at gene level from these minimal p-values
+  mutate(
+    padj = p.adjust(pvalue, method = "fdr")
+  )
+```
+
+Compare to DeSeq2 Differential Expression:
+
+```{r}
+alpha <- 0.05
+
+## DEXSeq per-gene q-values (melanoma)
+dex_gene_mel <- dexseqResultGene_mel %>%
+  mutate(
+    dex_padj = padj,
+    dex_sig  = !is.na(padj) & padj < alpha
+  )
+
+## DESeq2 gene-level q-values (melanoma)
+deseq_gene_mel <- deseq2_res_melanoma %>%
+  as.data.frame() %>%
+  rownames_to_column("gene_id") %>%
+  as_tibble() %>%
+  mutate(
+    deseq_padj = padj,
+    deseq_sig  = !is.na(padj) & padj < alpha
+  )
+
+## Gene universe = genes present in BOTH results
+univ <- intersect(dex_gene_mel$gene_id, deseq_gene_mel$gene_id)
+
+both <- dex_gene_mel %>%
+  filter(gene_id %in% univ) %>%
+  inner_join(
+    deseq_gene_mel %>% filter(gene_id %in% univ),
+    by = "gene_id"
+  )
+
+## Contingency table (DEXSeq vs DESeq2 significance)
+contig_tab <- table(
+  DEXSeq = both$dex_sig,
+  DESeq2 = both$deseq_sig
+)
+contig_tab
+
+```
+
+## Bladder
+
+```{r}
+dexseqResultGene_blad <-
+  dexseq_res_bladder %>%
+  as.data.frame() %>%
+  as_tibble() %>%
+  # keep only rows with a valid test statistic
+  filter(!is.na(stat)) %>%
+  # select and rename columns
+  dplyr::select(
+    gene_id    = groupID,
+    isoform_id = featureID,
+    stat,
+    log2FC     = dplyr::starts_with("log2fold_"),
+    pvalue,
+    padj
+  ) %>%
+  # group by gene (to consider all its isoforms)
+  group_by(gene_id) %>%
+  # for each gene, keep the isoform with the smallest p-value
+  slice_min(
+    order_by  = pvalue,
+    n         = 1,
+    with_ties = FALSE
+  ) %>%
+  ungroup() %>%
+  # recompute FDR at gene level from those minimal p-values
+  mutate(
+    padj = p.adjust(pvalue, method = "fdr")
+  )
+```
+
+```{r}
+alpha <- 0.05
+
+## DEXSeq per-gene q-values (bladder)
+dex_gene_bladder <- dexseqResultGene_blad %>%
+  mutate(
+    dex_padj = padj,
+    dex_sig  = !is.na(padj) & padj < alpha
+  )
+
+## DESeq2 gene-level q-values (bladder)
+deseq_gene_bladder <- deseq2_res_bladder %>%
+  as.data.frame() %>%
+  rownames_to_column("gene_id") %>%
+  as_tibble() %>%
+  mutate(
+    deseq_padj = padj,
+    deseq_sig  = !is.na(padj) & padj < alpha
+  )
+
+## Gene universe = genes present in BOTH results
+univ <- intersect(dex_gene_bladder$gene_id, deseq_gene_bladder$gene_id)
+
+both <- dex_gene_bladder %>%
+  filter(gene_id %in% univ) %>%
+  inner_join(
+    deseq_gene_bladder %>% filter(gene_id %in% univ),
+    by = "gene_id"
+  )
+
+## Contingency table (DEXSeq vs DESeq2 significance)
+contig_tab_blad <- table(
+  DEXSeq = both$dex_sig,
+  DESeq2 = both$deseq_sig
+)
+contig_tab_blad
+```
