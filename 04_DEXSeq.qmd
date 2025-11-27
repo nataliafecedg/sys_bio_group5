@@ -249,22 +249,20 @@ ggsave(filename = file.path(plots_dir, "DEXSeq Volcano Plot (Bladder).png"), plo
 
 ```{r}
 ### MELANOMA MA-PLOT ----
-p <- plotMA(
-  dexseq_res_melanoma,
-  main = "DEXSeq MA Plot – Melanoma",
-  cex = 0.5
-)
-
-ggsave(filename = file.path(plots_dir, "DEXSeq MA Plot (Melanoma).png"), plot = p, width = 8, height = 6, dpi = 300)
+png(file.path(plots_dir, "DEXSeq_MA_Plot_Melanoma.png"),
+    width = 8, height = 6, units = "in", res = 300)
+plotMA(dexseq_res_melanoma,
+       main = "DEXSeq MA Plot – Melanoma",
+       cex = 0.5)
+dev.off()
 
 ### BLADDER MA-PLOT ----
-p <- plotMA(
-  dexseq_res_bladder,
-  main = "DEXSeq MA Plot – Bladder",
-  cex = 0.5
-)
-
-ggsave(filename = file.path(plots_dir, "DEXSeq MA Plot (Bladder).png"), plot = p, width = 8, height = 6, dpi = 300)
+png(file.path(plots_dir, "DEXSeq_MA_Plot_Bladder.png"),
+    width = 8, height = 6, units = "in", res = 300)
+plotMA(dexseq_res_bladder,
+       main = "DEXSeq MA Plot – Bladder",
+       cex = 0.5)
+dev.off()
 ```
 
 **In the melanoma MA plot**, almost all the points are concentrated around the horizontal zero line: this indicates that most exons exhibit minimal differences in usage between treated and untreated subjects. Furthermore, the red points, representing exons significantly altered by treatment, are relatively few and distributed narrowly along the vertical axis (log2 fold-change). The lack of large upward or downward deviations (absence of many values ​​\>1 or \<-1) confirms that the drug induces only modest splicing changes. In other words, reading the graph, it is clear that in melanoma, the effect of treatment on splicing is present but limited.
@@ -272,121 +270,3 @@ ggsave(filename = file.path(plots_dir, "DEXSeq MA Plot (Bladder).png"), plot = p
 **In the bladder MA plot**, however, a much broader distribution of points along the vertical axis is noted: numerous exons show marked log2 fold changes, both positive and negative. This indicates that exon usage varies more strongly between treated and control subjects. Furthermore, the number of red points is significantly higher than in melanoma: a massive presence of exons with padj \< 0.05 suggests that the treatment significantly influences a much higher number of splicing events. Reading the graph, the width of the dispersion and the high density of significant exons clearly show that the drug has a much more extensive effect on the modulation of isoforms in bladder tissue.
 
 **Comparing the two MA plots** directly, we note that in melanoma, the cloud of dots is narrow and centered around zero with few significant exons, while in the bladder, the vertical dispersion is much wider and the red dots are numerous and distributed across the entire log2 fold-change range. This interpretation of the graph indicates that the drug has a significantly more intense impact on splicing in the bladder, while in melanoma, the effect remains more moderate. Interpretation therefore depends on the amplitude of the change (height of the dots) and the number of significant events (number of red dots).
-
-## Heatmap
-
-```{### HEATMAP – TOP DEU EXONS (MELANOMA)   ###}
-# 1. Top 100 esoni significativi
-top_mel <- sig_iso_mel %>%
-  arrange(padj) %>%
-  head(100)
-
-top_ids_mel <- rownames(top_mel)
-
-# 2. Estrarre i fitted values dal modello DEXSeq
-fitted_mel <- fitted(dxd_mel) %>%
-  as.data.frame() %>%
-  tibble::rownames_to_column("exon_id")
-
-# 3. Filtrare i top esoni
-heat_mel <- fitted_mel %>%
-  filter(exon_id %in% top_ids_mel)
-
-# 4. Convertire in formato long
-heat_mel_long <- heat_mel %>%
-  tidyr::pivot_longer(
-    cols = -exon_id,
-    names_to = "sample",
-    values_to = "value"
-  )
-
-# 5. Aggiungere annotazioni (treated vs untreated)
-heat_mel_long <- heat_mel_long %>%
-  left_join(
-    melanoma_metadata %>% tibble::rownames_to_column("sample"),
-    by = "sample"
-  )
-
-# 6. Ordinare i campioni per condizione
-heat_mel_long$sample <- factor(
-  heat_mel_long$sample,
-  levels = melanoma_metadata %>%
-    tibble::rownames_to_column("sample") %>%
-    arrange(condition) %>%
-    pull(sample)
-)
-
-# 7. Heatmap ggplot2 (migliorata)
-ggplot(heat_mel_long, aes(x = sample, y = exon_id, fill = log2(value + 1))) +
-  geom_tile() +
-  scale_fill_gradient(low = "white", high = "red") +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
-    axis.text.y = element_blank()
-  ) +
-  labs(
-    title = "Heatmap – Top DEU Exons (Melanoma)",
-    x = "Samples",
-    y = "Exon bins",
-    fill = "log2(fitted+1)"
-  )
-
-### HEATMAP – TOP DEU EXONS (BLADDER)    ###
-# 1. Top 100 esoni significativi
-top_blad <- sig_iso_blad %>%
-  arrange(padj) %>%
-  head(100)
-
-top_ids_blad <- rownames(top_blad)
-
-# 2. Estrarre i fitted values
-fitted_blad <- fitted(dxd_blad) %>%
-  as.data.frame() %>%
-  tibble::rownames_to_column("exon_id")
-
-# 3. Filtrare i top
-heat_blad <- fitted_blad %>%
-  filter(exon_id %in% top_ids_blad)
-
-# 4. Long format
-heat_blad_long <- heat_blad %>%
-  tidyr::pivot_longer(
-    cols = -exon_id,
-    names_to = "sample",
-    values_to = "value"
-  )
-
-# 5. Annotazioni (treated/untreated)
-heat_blad_long <- heat_blad_long %>%
-  left_join(
-    bladder_metadata %>% tibble::rownames_to_column("sample"),
-    by = "sample"
-  )
-
-# 6. Ordinamento dei campioni per condizione
-heat_blad_long$sample <- factor(
-  heat_blad_long$sample,
-  levels = bladder_metadata %>%
-    tibble::rownames_to_column("sample") %>%
-    arrange(condition) %>%
-    pull(sample)
-)
-
-# 7. Heatmap
-ggplot(heat_blad_long, aes(x = sample, y = exon_id, fill = log2(value + 1))) +
-  geom_tile() +
-  scale_fill_gradient(low = "white", high = "blue") +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
-    axis.text.y = element_blank()
-  ) +
-  labs(
-    title = "Heatmap – Top DEU Exons (Bladder)",
-    x = "Samples",
-    y = "Exon bins",
-    fill = "log2(fitted+1)"
-  )
-
-```

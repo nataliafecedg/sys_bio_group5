@@ -239,6 +239,8 @@ p
 ggsave(filename = file.path(plots_dir, "DESeq2 Volcano plot (Melanoma).png"), plot = p, width = 8, height = 6, dpi = 300)
 ```
 
+In the **volcano plot of melanoma pathways**, each point represents a biological process, and its position reflects the direction of enrichment (NES) and its significance (–log10 padj). The significantly altered blue pathways are concentrated almost exclusively in the NES-positive area, indicating that the treatment primarily enhances processes related to the cell cycle, mitotic division, and chromosome segregation. This is useful in our investigation because it shows that in melanoma, the drug does not induce extensive and diverse remodeling as in the bladder, but selectively activates specific proliferative pathways, suggesting a more limited and focused response in melanoma tissue.
+
 **Non-directional on bladder:**
 
 ```{r}
@@ -279,6 +281,300 @@ p <- ggplot(fg_volcano_bladder, aes(x = NES, y = mlog10padj, color = sig)) +
 p
 ggsave(filename = file.path(plots_dir, "DESeq2 Volcano plot (Bladder).png"), plot = p, width = 8, height = 6, dpi = 300)
 ```
+
+In this **volcano plot of bladder pathways**, each dot represents a biological process, and its position indicates both the strength of the enrichment (NES on the X-axis) and its statistical significance (–log10 padj on the Y-axis). The blue dots—significantly altered pathways—show that the treatment primarily modifies immune, metabolic, and response-to-external stimuli processes, while the non-significant ones remain close to the threshold. This aids our investigation because it reveals which biological functions are most affected by the drug in bladder tissue, indicating specific directions of functional remodeling that would not emerge by looking at individual genes.
+
+```{r}
+################ MELANOMA: volcano colored by group ###############
+
+res_mel_df <- as.data.frame(deseq2_res_melanoma) %>%
+  tibble::rownames_to_column("gene_id") %>%
+  mutate(
+    log2FC = log2FoldChange,
+    mlog10padj = -log10(padj),
+    sig = !is.na(padj) & padj < 0.05,
+    group_color = case_when(
+      sig & log2FC > 0 ~ "Up_in_Treated",
+      sig & log2FC < 0 ~ "Up_in_Untreated",
+      TRUE ~ "Not_significant"
+    )
+  )
+
+# label top 20 DE genes
+top_genes_mel <- res_mel_df %>%
+  filter(sig) %>%
+  arrange(padj) %>%
+  slice_head(n = 20)
+
+p_mel_volcano <- ggplot(res_mel_df,
+                        aes(x = log2FC, y = mlog10padj, color = group_color)) +
+  geom_point(alpha = 0.7, size = 1.4) +
+  geom_hline(yintercept = -log10(0.05), linetype = 2) +
+  geom_vline(xintercept = 0, linetype = 3) +
+  geom_text_repel(
+    data = top_genes_mel,
+    aes(label = gene_id),
+    size = 3,
+    max.overlaps = 20
+  ) +
+  scale_color_manual(
+    values = c(
+      "Up_in_Treated" = "red",
+      "Up_in_Untreated" = "blue",
+      "Not_significant" = "grey70"
+    ),
+    labels = c(
+      "Up_in_Treated" = "Up in Treated",
+      "Up_in_Untreated" = "Up in Untreated",
+      "Not_significant" = "Not significant"
+    )
+  ) +
+  labs(
+    title = "Volcano Plot – Melanoma (Genes colored by group)",
+    x = "log2 Fold Change (treated vs untreated)",
+    y = expression(-log[10](padj)),
+    color = "Gene class"
+  ) +
+  theme_minimal(base_size = 12)
+
+p_mel_volcano
+
+################ BLADDER: volcano colored by group ###############
+
+res_blad_df <- as.data.frame(deseq2_res_bladder) %>%
+  tibble::rownames_to_column("gene_id") %>%
+  mutate(
+    log2FC = log2FoldChange,
+    mlog10padj = -log10(padj),
+    sig = !is.na(padj) & padj < 0.05,
+    group_color = case_when(
+      sig & log2FC > 0 ~ "Up_in_Treated",
+      sig & log2FC < 0 ~ "Up_in_Untreated",
+      TRUE ~ "Not_significant"
+    )
+  )
+
+# top 20 DE genes
+top_genes_blad <- res_blad_df %>%
+  filter(sig) %>%
+  arrange(padj) %>%
+  slice_head(n = 20)
+
+p_blad_volcano <- ggplot(res_blad_df,
+                         aes(x = log2FC, y = mlog10padj, color = group_color)) +
+  geom_point(alpha = 0.7, size = 1.4) +
+  geom_hline(yintercept = -log10(0.05), linetype = 2) +
+  geom_vline(xintercept = 0, linetype = 3) +
+  geom_text_repel(
+    data = top_genes_blad,
+    aes(label = gene_id),
+    size = 3,
+    max.overlaps = 20
+  ) +
+  scale_color_manual(
+    values = c(
+      "Up_in_Treated" = "red",
+      "Up_in_Untreated" = "blue",
+      "Not_significant" = "grey70"
+    ),
+    labels = c(
+      "Up_in_Treated" = "Up in Treated",
+      "Up_in_Untreated" = "Up in Untreated",
+      "Not_significant" = "Not significant"
+    )
+  ) +
+  labs(
+    title = "Volcano Plot – Bladder (Genes colored by group)",
+    x = "log2 Fold Change (treated vs untreated)",
+    y = expression(-log[10](padj)),
+    color = "Gene class"
+  ) +
+  theme_minimal(base_size = 12)
+
+p_blad_volcano
+
+```
+
+In **melanoma**, the volcano plot shows that only a limited number of genes exhibit significant changes, indicating a more selective treatment response, concentrated on a few key transcription factors. This distribution suggests that the drug induces targeted changes rather than a global reorganization of gene expression.
+
+Nel **bladder** il volcano plot rivela un’ampia quantità di geni significativamente alterati, con una netta separazione tra quelli più espressi nei trattati e nei non trattati, segno di una risposta molto più estesa e sistemica al farmaco. Questa forte attività trascrizionale indica che il trattamento ha un impatto biologico molto più profondo, coinvolgendo interi moduli genici e pathway regolatori.
+
+## Heatmap
+
+```{r}
+########################################################
+### HEATMAP – DIFFERENTIAL GENE EXPRESSION (DESeq2) ###
+########################################################
+
+############ MELANOMA ############
+
+# 1. Convert DESeq2 results to a dataframe and extract significant genes
+res_mel_df <- as.data.frame(deseq2_res_melanoma) %>%
+  tibble::rownames_to_column("gene_id")
+
+sig_mel <- res_mel_df %>%
+  filter(!is.na(padj), padj < 0.05) %>%
+  arrange(padj)
+
+# 2. Select top 40 most significant DE genes
+top_mel_genes <- sig_mel %>%
+  slice_head(n = 40) %>%
+  pull(gene_id)
+
+# 3. Extract rlog-normalized expression matrix and filter for selected genes
+mat_mel <- assay(vsd_melanoma) %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("gene_id") %>%
+  filter(gene_id %in% top_mel_genes)
+
+# 4. Convert to long format and add sample group information
+heat_mel_long <- mat_mel %>%
+  tidyr::pivot_longer(
+    cols = -gene_id,
+    names_to = "sample",
+    values_to = "expr"
+  ) %>%
+  left_join(
+    melanoma_metadata %>% dplyr::select(sample_id, Groups),
+    by = c("sample" = "sample_id")
+  )
+
+# 5. Compute z-scores per gene (row-wise scaling)
+heat_mel_long <- heat_mel_long %>%
+  dplyr::group_by(gene_id) %>%
+  dplyr::mutate(z = as.numeric(scale(expr))) %>%
+  dplyr::ungroup()
+
+# 5b. Cluster genes by expression pattern
+mat_mel_mat <- mat_mel %>%
+  tibble::column_to_rownames("gene_id") %>%
+  as.matrix()
+
+mat_mel_scaled <- t(scale(t(mat_mel_mat)))
+gene_dend_mel <- hclust(dist(mat_mel_scaled))
+gene_order_mel <- rownames(mat_mel_scaled)[gene_dend_mel$order]
+
+heat_mel_long$gene_id <- factor(heat_mel_long$gene_id,
+                                levels = gene_order_mel)
+
+# 6. Order samples by group (untreated → treated)
+sample_order_mel <- heat_mel_long %>%
+  dplyr::distinct(sample, Groups) %>%
+  dplyr::arrange(Groups, sample) %>%
+  dplyr::pull(sample)
+
+heat_mel_long$sample <- factor(heat_mel_long$sample,
+                               levels = sample_order_mel)
+
+# 7. Plot the heatmap
+p_mel_heat <- ggplot(heat_mel_long,
+                     aes(x = sample, y = gene_id, fill = z)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    axis.title.y = element_blank()
+  ) +
+  labs(
+    title = "DESeq2 Heatmap – Top 40 DE Genes (Melanoma)",
+    x = "Samples",
+    fill = "z-score (rlog)"
+  )
+
+p_mel_heat
+ggsave(filename = file.path(plots_dir, "DESeq2_heatmap_melanoma.png"),
+       plot = p_mel_heat, width = 8, height = 6, dpi = 300)
+
+
+
+############ BLADDER ############
+
+# 1. Convert DESeq2 results and extract significant genes
+res_blad_df <- as.data.frame(deseq2_res_bladder) %>%
+  tibble::rownames_to_column("gene_id")
+
+sig_blad <- res_blad_df %>%
+  filter(!is.na(padj), padj < 0.05) %>%
+  arrange(padj)
+
+# 2. Select top 40 DE genes
+top_blad_genes <- sig_blad %>%
+  slice_head(n = 40) %>%
+  pull(gene_id)
+
+# 3. Extract and filter the rlog matrix
+mat_blad <- assay(vsd_bladder) %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("gene_id") %>%
+  filter(gene_id %in% top_blad_genes)
+
+# 4. Long format + group info
+heat_blad_long <- mat_blad %>%
+  tidyr::pivot_longer(
+    cols = -gene_id,
+    names_to = "sample",
+    values_to = "expr"
+  ) %>%
+  left_join(
+    bladder_metadata %>% dplyr::select(sample_id, Groups),
+    by = c("sample" = "sample_id")
+  )
+
+# 5. Row-wise z-score
+heat_blad_long <- heat_blad_long %>%
+  dplyr::group_by(gene_id) %>%
+  dplyr::mutate(z = as.numeric(scale(expr))) %>%
+  dplyr::ungroup()
+
+# 5b. Cluster genes
+mat_blad_mat <- mat_blad %>%
+  tibble::column_to_rownames("gene_id") %>%
+  as.matrix()
+
+mat_blad_scaled <- t(scale(t(mat_blad_mat)))
+gene_dend_blad <- hclust(dist(mat_blad_scaled))
+gene_order_blad <- rownames(mat_blad_scaled)[gene_dend_blad$order]
+
+heat_blad_long$gene_id <- factor(heat_blad_long$gene_id,
+                                 levels = gene_order_blad)
+
+# 6. Order samples by group
+sample_order_blad <- heat_blad_long %>%
+  dplyr::distinct(sample, Groups) %>%
+  dplyr::arrange(Groups, sample) %>%
+  dplyr::pull(sample)
+
+heat_blad_long$sample <- factor(heat_blad_long$sample,
+                                levels = sample_order_blad)
+
+# 7. Plot heatmap
+p_blad_heat <- ggplot(heat_blad_long,
+                      aes(x = sample, y = gene_id, fill = z)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    axis.title.y = element_blank()
+  ) +
+  labs(
+    title = "DESeq2 Heatmap – Top 40 DE Genes (Bladder)",
+    x = "Samples",
+    fill = "z-score (rlog)"
+  )
+
+p_blad_heat
+ggsave(filename = file.path(plots_dir, "DESeq2_heatmap_bladder.png"),
+       plot = p_blad_heat, width = 8, height = 6, dpi = 300)
+
+```
+
+The **melanoma heatmap** still clearly distinguishes between treated and untreated patients, but with a gentler gradient: the selected genes distinguish the two groups, but with a less drastic effect than in the bladder. This suggests that the drug also modifies gene expression in melanoma, but more moderately, consistent with the idea that melanotic tissue responds to treatment more selectively and less massively.
+
+In the **bladder heatmap**, treated and untreated samples show two clearly separated color blocks: the genes most expressed in the treated group (red) are repressed in the untreated group (blue), and vice versa. This very clear visual separation indicates that the drug induces a strong and consistent remodeling of the bladder's gene expression profile, making the two groups easily distinguishable and confirming that the treatment has a systematic and marked impact on bladder tissue.
+
+**Comparing the two heatmaps**, it is clear that the bladder shows a much clearer separation between treated and untreated samples, with uniform and opposite color blocks between the groups. In melanoma, the distinction is present, but more nuanced: the expression profiles separate, but not with the same strength and consistency observed in the bladder. This comparison therefore indicates that the drug induces a much more marked transcriptional impact in the bladder, while in melanoma the response is more moderate and focused, consistent with what was also observed in the pathway and volcano plots.
 
 ## Cleaning environment
 
